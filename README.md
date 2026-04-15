@@ -37,6 +37,9 @@ The system starts at the customer's brain and ends at a credit decision with a t
 │  POST /credit/evaluate/async    → enqueue rq job → return job_id             │
 │  GET  /credit/evaluate/{job_id} → poll async result                          │
 │  POST /credit/offers/{id}/accept → enqueue deployment job                   │
+│  GET  /credit/evaluations       → paginated evaluation history               │
+│  GET  /credit/evaluations/stats → aggregate KPIs (approval rate, avg score)  │
+│  GET  /credit/offers            → paginated offer history                    │
 │  GET  /health                   → healthcheck (no auth)                      │
 └──────┬───────────────────────────────┬──────────────────────────────────────┘
        │                               │
@@ -60,7 +63,6 @@ The system starts at the customer's brain and ends at a credit decision with a t
                               │                       │
                               │  _deploy_credit_offer:│
                               │    accept offer        │
-                              │    update user profile │
                               │    save notification   │
                               └───────────────────────┘
 ```
@@ -85,7 +87,6 @@ The system starts at the customer's brain and ends at a credit decision with a t
 1. User calls `POST /credit/offers/{id}/accept`
 2. rq job enqueued: `_deploy_credit_offer`
 3. Worker marks offer as accepted, saves `Notification` record
-4. Reflects CloudWalk's event-driven micro-service architecture
 
 ---
 
@@ -114,18 +115,14 @@ WHERE user_id = '550e8400-e29b-41d4-a716-446655440000'
 ORDER BY captured_at DESC;
 ```
 
-**2. High-risk customers based on credit score threshold:**
+**2. High-risk evaluations (score < 400) with SHAP top factor:**
 ```sql
-SELECT u.id, u.external_id, u.current_credit_limit, u.last_score,
-       ce.probability_of_default, ce.decision, ce.created_at
-FROM users u
-JOIN credit_evaluations ce ON ce.id = (
-    SELECT id FROM credit_evaluations
-    WHERE json_extract(request_payload, '$.user_id') = u.id
-    ORDER BY created_at DESC LIMIT 1
-)
-WHERE u.last_score < 400
-ORDER BY u.last_score ASC
+SELECT id, decision, score, probability_of_default,
+       json_extract(shap_explanation, '$.top_factors[0].feature') AS top_factor,
+       created_at
+FROM credit_evaluations
+WHERE score < 400
+ORDER BY score ASC
 LIMIT 100;
 ```
 
@@ -173,10 +170,11 @@ npm install
 npm run dev
 ```
 
-Opens at `http://localhost:3000` with 4 pages:
-- **Dashboard** — KPI cards (AUC, KS, Brier), recent decisions, credit product tiers
-- **Avaliar Crédito** — interactive form: submit borrower data, receive score + SHAP waterfall
-- **Analytics** — ROC curve, calibration plot, score distribution, model comparison
+Opens at `http://localhost:3000` with 5 pages:
+- **Dashboard** — live KPIs (approval rate, avg score), recent decisions, credit product tiers
+- **Avaliar Crédito** — interactive form: submit borrower data, receive score + SHAP waterfall + offer acceptance
+- **Histórico** — paginated evaluation history with expandable SHAP details per row
+- **Analytics** — operational metrics (live) + ROC curve, calibration plot, model comparison (training data)
 - **Fairness** — 4/5ths rule by age/income cohort, LGPD regulatory risk analysis
 
 ---
@@ -333,7 +331,7 @@ Emotional data (stress, impulsivity, stability) is **highly sensitive** — it c
 
 ### Pseudonymisation
 
-- `users.external_id` stores a **SHA-256 hash** of the InfinitePay user ID — never the raw ID
+- `users.external_id` stores a pseudonymised identifier — never the raw InfinitePay user ID. In production, this would be a SHA-256 hash enforced at the application layer
 - `emotional_events.user_id` is a UUID that maps to the pseudonymised profile, not to PII
 - Raw PII (name, CPF, address) is never stored in the ECS database — it remains in the source system of record
 - SHAP explanations reference feature names (`revolving_utilization`, `age`) — not individual identities

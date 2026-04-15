@@ -89,9 +89,13 @@ const TIER_COLORS: Record<string, string> = {
 
 export default function AnalyticsPage() {
   const [stats, setStats] = useState<EvaluationStats | null>(null);
+  const [statsError, setStatsError] = useState(false);
 
   useEffect(() => {
-    api.evaluationStats().then(setStats).catch(() => null);
+    api
+      .evaluationStats()
+      .then(setStats)
+      .catch(() => setStatsError(true));
   }, []);
 
   const tierData = stats
@@ -128,7 +132,13 @@ export default function AnalyticsPage() {
 
         {/* Operational tab — real data from the running API */}
         <TabsContent value="operacional" className="mt-4">
-          {stats === null ? (
+          {statsError ? (
+            <Card className="bg-transparent border-0">
+              <CardContent className="flex flex-col items-center gap-2 py-16 text-red-400/80">
+                <p className="text-sm">Não foi possível carregar as métricas. Verifique se a API está rodando.</p>
+              </CardContent>
+            </Card>
+          ) : stats === null ? (
             <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
               <Skeleton className="h-64 w-full bg-zinc-800 rounded-xl" />
               <Skeleton className="h-64 w-full bg-zinc-800 rounded-xl" />
@@ -343,7 +353,7 @@ export default function AnalyticsPage() {
             ))}
           </div>
           <p className="text-xs text-zinc-600 text-center mt-3">
-            XGB + Emocional (roxo claro) vs XGB Calibrado (indigo) — features emocionais não agregam valor preditivo.
+            XGB + Emocional (ciano) vs XGB Calibrado (verde) — features emocionais não agregam valor preditivo.
           </p>
         </TabsContent>
       </Tabs>

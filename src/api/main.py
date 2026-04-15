@@ -143,6 +143,16 @@ def evaluate_credit(
     )
     log_event(request_id, "model_scored", {"model": result["model_used"]})
 
+    save_evaluation(
+        request_id=request_id,
+        decision=result["decision"],
+        probability=result["probability_of_default"],
+        score=result["score"],
+        model_used=result["model_used"],
+        request_payload=request.model_dump(),
+        shap_explanation=result["shap_explanation"],
+    )
+
     offer_id: str | None = None
     if result["decision"] == "APPROVED":
         offer_id = str(uuid.uuid4())
@@ -156,15 +166,6 @@ def evaluate_credit(
         )
 
     response = _build_response(request_id, result, offer_id=offer_id)
-    save_evaluation(
-        request_id=request_id,
-        decision=result["decision"],
-        probability=result["probability_of_default"],
-        score=result["score"],
-        model_used=result["model_used"],
-        request_payload=request.model_dump(),
-        shap_explanation=result["shap_explanation"],
-    )
     log_event(request_id, "decision_made", {"decision": result["decision"]})
     return response
 

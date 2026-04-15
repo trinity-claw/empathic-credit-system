@@ -207,6 +207,17 @@ Financial stress events 7d: 5
 **"O SHAP é exato ou aproximado?"**
 > "Exato para tree models. TreeExplainer usa o algoritmo O(TLD) que calcula os valores de Shapley exatos percorrendo as árvores diretamente — não é sampling, não é LIME. Cada barra no gráfico é matematicamente garantida."
 
+### Domínio e simplificações do case
+
+**"Cadê o usuário? O user_id é None em tudo."**
+> "O sistema é request-centric por design neste case. Em produção, o `user_id` viria do token de autenticação (JWT/OAuth) — o request chegaria já identificado. As tabelas de `User` existem no schema como ponto de integração — a estrutura está pronta, mas não construí autenticação de usuário porque não estava no escopo do desafio."
+
+**"O fluxo de aceite de oferta é um produto real?"**
+> "É um recorte de lifecycle para demonstrar arquitetura orientada a eventos — separação entre decisão (síncrona) e deploy (assíncrono via fila). Não é um fluxo operacional completo. Em produção, teria validação de conta, compliance check, e integração com o core banking."
+
+**"O path assíncrono persiste avaliação?"**
+> "Não. O path async serve para demonstrar a arquitetura de fila com rq — o fluxo principal e auditado é o síncrono. Em produção, o worker também persistiria, mas para o case priorizei robustez no fluxo principal ao invés de duplicar lógica no worker."
+
 ### Arquitetura e decisões técnicas
 
 **"Por que SQLite e não Postgres?"**
