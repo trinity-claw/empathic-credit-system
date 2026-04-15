@@ -83,6 +83,7 @@ app.add_middleware(
 @app.middleware("http")
 async def request_id_middleware(request: Request, call_next) -> Response:
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    request.state.request_id = request_id
     start = time.monotonic()
     response = await call_next(request)
     duration_ms = int((time.monotonic() - start) * 1000)
@@ -131,9 +132,10 @@ def _build_response(
 @app.post("/credit/evaluate", response_model=CreditResponse, tags=["credit"])
 def evaluate_credit(
     request: CreditRequest,
+    http_request: Request,
     _user: str = Depends(require_auth),
 ) -> CreditResponse:
-    request_id = str(uuid.uuid4())
+    request_id = http_request.state.request_id
     logger.info("Synchronous evaluation", extra={"request_id": request_id})
     log_event(request_id, "request_received")
 
