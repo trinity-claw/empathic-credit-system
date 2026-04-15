@@ -1,8 +1,4 @@
-"""rq worker for async credit evaluation and credit deployment jobs.
-
-The model and explainer are loaded at module level — once per worker process,
-not per job. This keeps latency low on repeated jobs.
-"""
+"""rq worker for async credit evaluation and credit deployment jobs."""
 
 import json
 import logging
@@ -31,13 +27,7 @@ def _get_queue() -> Queue:
     return _queue
 
 
-# ---------------------------------------------------------------------------
-# Scoring job
-# ---------------------------------------------------------------------------
-
-
 def _run_evaluation(request_data: dict) -> dict:
-    """Executed inside the rq worker process."""
     if not model_store.is_loaded():
         model_store.load_models()
 
@@ -47,24 +37,12 @@ def _run_evaluation(request_data: dict) -> dict:
 
 
 def enqueue_evaluation(request_data: dict) -> str:
-    """Enqueue an evaluation job. Returns the job ID."""
     q = _get_queue()
     job = q.enqueue(_run_evaluation, request_data)
     return job.id
 
 
-# ---------------------------------------------------------------------------
-# Credit deployment job (offer accepted → update profile → notify)
-# ---------------------------------------------------------------------------
-
-
 def _deploy_credit_offer(offer_id: str, user_id: str | None) -> dict:
-    """Executed inside the rq worker process.
-
-    Flow: accept offer in DB → update user credit limit → send notification.
-    Reflects CloudWalk's event-driven architecture where credit deployment
-    is decoupled from scoring for fairness and traceability.
-    """
     offer = accept_credit_offer(offer_id)
     if offer is None:
         logger.warning("Offer not found or already processed: %s", offer_id)
@@ -94,26 +72,15 @@ def _deploy_credit_offer(offer_id: str, user_id: str | None) -> dict:
 
 
 def enqueue_deployment(offer_id: str, user_id: str | None) -> str:
-    """Enqueue a credit deployment job. Returns the job ID."""
     q = _get_queue()
     job = q.enqueue(_deploy_credit_offer, offer_id, user_id)
     return job.id
 
 
-# ---------------------------------------------------------------------------
-# Real-time emotion stream (Redis Pub/Sub publisher)
-# ---------------------------------------------------------------------------
-
 _EMOTION_CHANNEL = "ecs:emotion_stream"
 
 
 def publish_emotional_event(event_id: str, payload: dict) -> None:
-    """Publish an emotional event to the Redis Pub/Sub channel.
-
-    Any number of downstream consumers (analytics, risk aggregators) can
-    subscribe to this channel without coupling to the API. In production,
-    this would be replaced by Kafka for durability and replay semantics.
-    """
     settings = get_settings()
     redis_conn = Redis.from_url(settings.redis_url)
     message = json.dumps({"event_id": event_id, **payload})
@@ -124,13 +91,7 @@ def publish_emotional_event(event_id: str, payload: dict) -> None:
     )
 
 
-# ---------------------------------------------------------------------------
-# Job status polling (shared)
-# ---------------------------------------------------------------------------
-
-
 def get_job_result(job_id: str) -> tuple[str, dict | None]:
-    """Fetch job status and result. Returns (status, result_dict | None)."""
     settings = get_settings()
     redis_conn = Redis.from_url(settings.redis_url)
     try:

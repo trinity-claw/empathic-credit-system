@@ -163,7 +163,21 @@ docker compose up --build
 ```
 
 API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-Default credentials: `admin` / `changeme`.
+Frontend dashboard at `http://localhost:3000`. Default API credentials: `admin` / `changeme`.
+
+### Frontend (Next.js + shadcn/ui)
+
+```bash
+cd frontend
+npm install
+npm run dev
+```
+
+Opens at `http://localhost:3000` with 4 pages:
+- **Dashboard** — KPI cards (AUC, KS, Brier), recent decisions, credit product tiers
+- **Avaliar Crédito** — interactive form: submit borrower data, receive score + SHAP waterfall
+- **Analytics** — ROC curve, calibration plot, score distribution, model comparison
+- **Fairness** — 4/5ths rule by age/income cohort, LGPD regulatory risk analysis
 
 ---
 

@@ -1,14 +1,4 @@
-"""Stratified train/val/test split with parquet persistence.
-
-Why stratified: with 6.68% positive class, random splits can produce folds
-with significantly different proportions, especially in the smaller val/test
-sets. Stratification preserves ~6.68% in each split.
-
-Why not temporal: the Give Me Some Credit dataset has no time column.
-In a production scenario with CloudWalk data, splits would be by observation
-date to simulate real usage (train on past, test on future). This limitation
-is documented in the model card.
-"""
+"""Stratified train/val/test split with parquet persistence."""
 
 import logging
 from pathlib import Path
@@ -31,11 +21,6 @@ def make_splits(
     val_size: float = 0.15,
     random_state: int = RANDOM_STATE,
 ) -> dict[str, pd.DataFrame]:
-    """Stratified 70/15/15 split preserving target class ratio.
-
-    Strategy: first separate test (15%), then divide remainder into train/val
-    adjusting val_size to be the correct fraction of the remaining train_val.
-    """
     train_val, test = train_test_split(
         df,
         test_size=test_size,
@@ -55,7 +40,6 @@ def make_splits(
 
 
 def save_splits(splits: dict[str, pd.DataFrame], out_dir: Path = PROCESSED_DIR) -> None:
-    """Persist each split as parquet (preserves dtypes, fast to read)."""
     out_dir.mkdir(parents=True, exist_ok=True)
     for name, df in splits.items():
         path = out_dir / f"{name}.parquet"
@@ -70,7 +54,6 @@ def save_splits(splits: dict[str, pd.DataFrame], out_dir: Path = PROCESSED_DIR) 
 
 
 def load_splits(processed_dir: Path = PROCESSED_DIR) -> dict[str, pd.DataFrame]:
-    """Load persisted splits. Used by notebooks and the API."""
     return {
         name: pd.read_parquet(processed_dir / f"{name}.parquet")
         for name in ("train", "val", "test")

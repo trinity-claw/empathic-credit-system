@@ -1,17 +1,4 @@
-"""Evaluation metrics for credit risk models.
-
-Metrics used:
-- AUC-ROC: ranking capability (good vs bad). 0.5=random, 1.0=perfect.
-  In credit scoring, 0.75+ is decent, 0.80+ is good.
-- KS (Kolmogorov-Smirnov): max distance between CDFs of good and bad scores.
-  Classic metric in the Brazilian credit market. KS>30 acceptable, >40 good.
-- Brier score: MSE between predicted probability and realized outcome.
-  Measures CALIBRATION. Lower is better. Models that rank well but are
-  uncalibrated have high Brier.
-- Precision@base_rate: in credit operations you fix an approval rate (or a
-  minimum recall of bads). Precision at that operating point often matters
-  more than any global metric.
-"""
+"""Evaluation metrics for credit risk models."""
 
 from dataclasses import dataclass, field
 from typing import Any
@@ -30,10 +17,8 @@ from sklearn.metrics import (
 
 @dataclass
 class EvalResult:
-    """Structured evaluation result. Enables easy side-by-side model comparison."""
-
     model_name: str
-    split: str  # "train", "val", "test"
+    split: str
     auc: float
     ks: float
     brier: float
@@ -55,11 +40,7 @@ class EvalResult:
 
 
 def compute_ks(y_true: np.ndarray, y_proba: np.ndarray) -> float:
-    """KS statistic = max distance between CDFs of class 0 and class 1 scores.
-
-    Manual implementation for transparency. Equivalent to scipy.stats.ks_2samp
-    applied to scores separated by class.
-    """
+    """Max distance between CDFs of class 0 and class 1 scores."""
     y_true = np.asarray(y_true)
     y_proba = np.asarray(y_proba)
     order = np.argsort(y_proba)
@@ -76,7 +57,6 @@ def compute_ks(y_true: np.ndarray, y_proba: np.ndarray) -> float:
 def precision_at_threshold(
     y_true: np.ndarray, y_proba: np.ndarray, threshold: float
 ) -> float:
-    """Precision when predictions with score >= threshold are flagged as positive."""
     y_true = np.asarray(y_true)
     y_proba = np.asarray(y_proba)
     y_pred = (y_proba >= threshold).astype(int)
@@ -91,11 +71,9 @@ def evaluate(
     model_name: str,
     split: str,
 ) -> EvalResult:
-    """Compute all metrics at once. Returns EvalResult."""
     y_true = np.asarray(y_true)
     y_proba = np.asarray(y_proba)
     base_rate = float(y_true.mean())
-    # threshold = base rate: "flag the top X% riskiest as bad"
     threshold = float(np.quantile(y_proba, 1 - base_rate))
     return EvalResult(
         model_name=model_name,
@@ -120,7 +98,6 @@ def plot_evaluation(
     y_proba = np.asarray(y_proba)
     fig, axes = plt.subplots(1, 4, figsize=figsize)
 
-    # 1. ROC curve
     fpr, tpr, _ = roc_curve(y_true, y_proba)
     auc = roc_auc_score(y_true, y_proba)
     axes[0].plot(fpr, tpr, color="#C44E52", lw=2, label=f"AUC = {auc:.3f}")
@@ -131,7 +108,6 @@ def plot_evaluation(
     axes[0].legend(loc="lower right")
     axes[0].grid(alpha=0.3)
 
-    # 2. KS plot (separate CDFs)
     order = np.argsort(y_proba)
     y_sorted = y_true[order]
     proba_sorted = y_proba[order]
@@ -152,7 +128,6 @@ def plot_evaluation(
     axes[1].legend()
     axes[1].grid(alpha=0.3)
 
-    # 3. Calibration curve
     prob_true, prob_pred = calibration_curve(
         y_true, y_proba, n_bins=10, strategy="quantile"
     )
@@ -165,7 +140,6 @@ def plot_evaluation(
     axes[2].legend()
     axes[2].grid(alpha=0.3)
 
-    # 4. Confusion matrix @ threshold = base_rate
     base_rate = float(y_true.mean())
     threshold = float(np.quantile(y_proba, 1 - base_rate))
     y_pred = (y_proba >= threshold).astype(int)
@@ -196,5 +170,4 @@ def plot_evaluation(
 
 
 def comparison_table(results: list[EvalResult]) -> pd.DataFrame:
-    """Build a comparison table of multiple models' metrics."""
     return pd.DataFrame([r.to_row() for r in results])

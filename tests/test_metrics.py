@@ -7,7 +7,6 @@ from src.evaluation.metrics import compute_ks, evaluate, precision_at_threshold
 
 def _perfect_scores(n: int = 100, pos_rate: float = 0.1):
     y = np.array([1] * int(n * pos_rate) + [0] * int(n * (1 - pos_rate)))
-    # Perfect scores: positives get 1.0, negatives get 0.0
     scores = y.astype(float)
     return y, scores
 
@@ -47,7 +46,6 @@ class TestPrecisionAtThreshold:
     def test_threshold_zero_equals_base_rate(self):
         y = np.array([1, 0, 0, 0, 1])
         scores = np.array([0.8, 0.6, 0.4, 0.2, 0.9])
-        # threshold 0: all flagged as positive, precision = base rate
         p = precision_at_threshold(y, scores, threshold=0.0)
         assert abs(p - 2 / 5) < 1e-6
 

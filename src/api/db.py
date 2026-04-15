@@ -29,18 +29,10 @@ class Base(DeclarativeBase):
     pass
 
 
-# ---------------------------------------------------------------------------
-# User profiles and financial history
-# ---------------------------------------------------------------------------
-
-
 class User(Base):
-    """User profile — stores current credit state and identity reference."""
-
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    # external_id is pseudonymised (hashed InfinitePay user ID), never PII
     external_id: Mapped[str | None] = mapped_column(
         String(128), index=True, nullable=True
     )
@@ -53,8 +45,6 @@ class User(Base):
 
 
 class Transaction(Base):
-    """Financial transaction linked to a user profile."""
-
     __tablename__ = "transactions"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -63,15 +53,12 @@ class Transaction(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     amount: Mapped[float] = mapped_column(Float)
-    # "purchase" | "payment" | "withdrawal" | "pix_in" | "pix_out"
     transaction_type: Mapped[str] = mapped_column(String(32))
     status: Mapped[str] = mapped_column(String(16), default="completed")
     extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class EmotionalEvent(Base):
-    """Emotional data event captured from the mobile app sensor stream."""
-
     __tablename__ = "emotional_events"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -91,8 +78,6 @@ class EmotionalEvent(Base):
 
 
 class CreditOffer(Base):
-    """Approved credit offer, pending user acceptance."""
-
     __tablename__ = "credit_offers"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -108,13 +93,10 @@ class CreditOffer(Base):
     credit_limit: Mapped[float] = mapped_column(Float)
     interest_rate: Mapped[float] = mapped_column(Float)
     credit_type: Mapped[str] = mapped_column(String(32))
-    # "pending" | "accepted" | "expired"
     status: Mapped[str] = mapped_column(String(16), default="pending")
 
 
 class Notification(Base):
-    """Mobile app push notification record."""
-
     __tablename__ = "notifications"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True)
@@ -125,16 +107,9 @@ class Notification(Base):
     created_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
-    # "credit_approved" | "credit_deployed" | "offer_expired"
     notification_type: Mapped[str] = mapped_column(String(32))
     payload: Mapped[dict | None] = mapped_column(JSON, nullable=True)
-    # "sent" | "delivered" | "failed"
     status: Mapped[str] = mapped_column(String(16), default="sent")
-
-
-# ---------------------------------------------------------------------------
-# Evaluation audit tables
-# ---------------------------------------------------------------------------
 
 
 class CreditEvaluation(Base):
@@ -153,8 +128,6 @@ class CreditEvaluation(Base):
 
 
 class CreditEvent(Base):
-    """Audit trail: lifecycle events for each evaluation request."""
-
     __tablename__ = "credit_events"
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
@@ -166,13 +139,7 @@ class CreditEvent(Base):
     detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
-# ---------------------------------------------------------------------------
-# Repository functions
-# ---------------------------------------------------------------------------
-
-
 def init_db() -> None:
-    """Create all tables if they don't exist."""
     engine = _get_engine()
     Base.metadata.create_all(engine)
 
@@ -183,7 +150,6 @@ def get_session() -> Session:
 
 
 def log_event(request_id: str, event_type: str, detail: dict | None = None) -> None:
-    """Record an audit event for a credit evaluation."""
     record = CreditEvent(request_id=request_id, event_type=event_type, detail=detail)
     with get_session() as session:
         session.add(record)
@@ -200,7 +166,6 @@ def save_evaluation(
     request_payload: dict,
     shap_explanation: dict,
 ) -> None:
-    """Persist a credit evaluation record."""
     record = CreditEvaluation(
         id=request_id,
         decision=decision,
@@ -221,7 +186,6 @@ def save_emotional_event(
     user_id: str | None,
     payload: dict,
 ) -> None:
-    """Persist an emotional event from the real-time stream."""
     record = EmotionalEvent(
         id=event_id,
         user_id=user_id,
@@ -245,7 +209,6 @@ def save_credit_offer(
     interest_rate: float,
     credit_type: str,
 ) -> None:
-    """Persist an approved credit offer awaiting user acceptance."""
     record = CreditOffer(
         id=offer_id,
         user_id=user_id,
@@ -261,7 +224,6 @@ def save_credit_offer(
 
 
 def accept_credit_offer(offer_id: str) -> CreditOffer | None:
-    """Mark offer as accepted. Returns the offer or None if not found/already processed."""
     with get_session() as session:
         offer = session.get(CreditOffer, offer_id)
         if offer is None or offer.status != "pending":
@@ -280,7 +242,6 @@ def save_notification(
     notification_type: str,
     payload: dict | None = None,
 ) -> None:
-    """Persist a notification record (simulates mobile push delivery)."""
     record = Notification(
         id=notification_id,
         user_id=user_id,
