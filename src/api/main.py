@@ -11,7 +11,10 @@ from pythonjsonlogger.json import JsonFormatter
 from src.api import model_store
 from src.api.auth import require_auth
 from src.api.db import (
+    get_evaluation_stats,
     init_db,
+    list_evaluations,
+    list_offers,
     log_event,
     save_credit_offer,
     save_evaluation,
@@ -23,8 +26,13 @@ from src.api.schemas import (
     CreditResponse,
     EmotionStreamRequest,
     EmotionStreamResponse,
+    EvaluationListResponse,
+    EvaluationStats,
+    EvaluationSummary,
     HealthResponse,
     OfferAcceptResponse,
+    OfferListResponse,
+    OfferSummary,
     ShapFactor,
 )
 from src.api.settings import get_settings
@@ -190,6 +198,33 @@ def accept_offer(
         extra={"offer_id": offer_id, "job_id": job_id},
     )
     return OfferAcceptResponse(offer_id=offer_id, job_id=job_id, status="queued")
+
+
+@app.get("/credit/evaluations/stats", response_model=EvaluationStats, tags=["credit"])
+def evaluation_stats(_user: str = Depends(require_auth)) -> EvaluationStats:
+    return EvaluationStats(**get_evaluation_stats())
+
+
+@app.get("/credit/evaluations", response_model=EvaluationListResponse, tags=["credit"])
+def list_credit_evaluations(
+    limit: int = 20,
+    offset: int = 0,
+    _user: str = Depends(require_auth),
+) -> EvaluationListResponse:
+    items, total = list_evaluations(limit=limit, offset=offset)
+    summaries = [EvaluationSummary(**item) for item in items]
+    return EvaluationListResponse(items=summaries, total=total)
+
+
+@app.get("/credit/offers", response_model=OfferListResponse, tags=["credit"])
+def list_credit_offers(
+    limit: int = 20,
+    offset: int = 0,
+    _user: str = Depends(require_auth),
+) -> OfferListResponse:
+    items, total = list_offers(limit=limit, offset=offset)
+    summaries = [OfferSummary(**item) for item in items]
+    return OfferListResponse(items=summaries, total=total)
 
 
 @app.post("/emotions/stream", response_model=EmotionStreamResponse, tags=["emotions"])

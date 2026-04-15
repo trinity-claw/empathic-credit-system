@@ -200,3 +200,42 @@ class OfferAcceptResponse(BaseModel):
     offer_id: str
     job_id: str
     status: str = "queued"
+
+
+class EvaluationSummary(BaseModel):
+    request_id: str
+    decision: str
+    score: int
+    probability_of_default: float
+    model_used: str
+    created_at: str
+    request_payload: dict[str, Any]
+    shap_explanation: dict[str, Any]
+
+
+class EvaluationListResponse(BaseModel):
+    items: list[EvaluationSummary]
+    total: int
+
+
+class EvaluationStats(BaseModel):
+    total_evaluations: int
+    approval_rate: float
+    avg_score: float
+    pending_offers: int
+    tier_distribution: dict[str, int]
+
+
+class OfferSummary(BaseModel):
+    offer_id: str
+    evaluation_id: str
+    credit_limit: float
+    interest_rate: float
+    credit_type: str
+    status: str
+    created_at: str
+
+
+class OfferListResponse(BaseModel):
+    items: list[OfferSummary]
+    total: int
