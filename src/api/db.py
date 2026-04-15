@@ -1,9 +1,8 @@
 """SQLAlchemy + SQLite database layer."""
 
-import json
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, String, Text, create_engine
+from sqlalchemy import JSON, DateTime, Float, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from src.api.settings import get_settings
@@ -32,7 +31,7 @@ class CreditEvaluation(Base):
     probability_of_default: Mapped[float] = mapped_column(Float)
     score: Mapped[int]
     model_used: Mapped[str] = mapped_column(String(64))
-    request_payload: Mapped[str] = mapped_column(Text)
+    request_payload: Mapped[dict] = mapped_column(JSON)
     shap_explanation: Mapped[dict] = mapped_column(JSON)
 
 
@@ -64,7 +63,7 @@ def save_evaluation(
         probability_of_default=probability,
         score=score,
         model_used=model_used,
-        request_payload=json.dumps(request_payload),
+        request_payload=request_payload,
         shap_explanation=shap_explanation,
     )
     with get_session() as session:

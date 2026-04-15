@@ -12,6 +12,9 @@ from src.explainability.shap_explainer import CreditExplainer
 
 logger = logging.getLogger(__name__)
 
+DEFAULT_THRESHOLD = 0.15
+SCORE_MAX = 1000
+
 FINANCIAL_FEATURES = [
     "revolving_utilization",
     "age",
@@ -74,8 +77,8 @@ def predict(request_data: dict, use_emotional: bool = False) -> dict:
 
     raw_proba = float(model.predict_proba(X)[:, 1][0])
     cal_proba = float(calibrator.transform([raw_proba])[0])
-    score = max(0, min(1000, int((1 - cal_proba) * 1000)))
-    decision = "DENIED" if cal_proba >= 0.15 else "APPROVED"
+    score = max(0, min(SCORE_MAX, int((1 - cal_proba) * SCORE_MAX)))
+    decision = "DENIED" if cal_proba >= DEFAULT_THRESHOLD else "APPROVED"
 
     explanation = explainer.explain_one(X).to_dict()
 

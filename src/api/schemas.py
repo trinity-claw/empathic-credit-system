@@ -5,6 +5,18 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+EMOTIONAL_FIELD_NAMES = (
+    "stress_level",
+    "impulsivity_score",
+    "emotional_stability",
+    "financial_stress_events_7d",
+)
+
+
+def has_emotional_data(data: dict) -> bool:
+    """Check if all four emotional fields are present and non-None."""
+    return all(data.get(f) is not None for f in EMOTIONAL_FIELD_NAMES)
+
 
 class CreditRequest(BaseModel):
     """Input for a credit evaluation request.
@@ -60,15 +72,7 @@ class CreditRequest(BaseModel):
 
     @property
     def has_emotional_features(self) -> bool:
-        return all(
-            f is not None
-            for f in [
-                self.stress_level,
-                self.impulsivity_score,
-                self.emotional_stability,
-                self.financial_stress_events_7d,
-            ]
-        )
+        return has_emotional_data(self.model_dump())
 
 
 class ShapFactor(BaseModel):

@@ -22,6 +22,8 @@ import shap
 
 logger = logging.getLogger(__name__)
 
+TOP_FACTORS_COUNT = 5
+
 
 @dataclass
 class ExplanationResult:
@@ -47,7 +49,7 @@ class ExplanationResult:
                     "contribution": v,
                     "direction": "increases_risk" if v > 0 else "decreases_risk",
                 }
-                for k, v in top[:5]
+                for k, v in top[:TOP_FACTORS_COUNT]
             ],
         }
 
