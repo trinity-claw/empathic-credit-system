@@ -1,13 +1,20 @@
 """Data loading and basic cleaning for Give Me Some Credit."""
 
+import logging
 from pathlib import Path
+
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 RAW_PATH = Path("data/raw/cs-training.csv")
 
 # mapeamento das colunas originais → snake_case
+# Handles both Kaggle name (SeriousDlqin2yrs) and OpenML name
+# (FinancialDistressNextTwoYears) for the target column.
 COLUMN_RENAME = {
     "SeriousDlqin2yrs": "target",
+    "FinancialDistressNextTwoYears": "target",
     "RevolvingUtilizationOfUnsecuredLines": "revolving_utilization",
     "age": "age",
     "NumberOfTime30-59DaysPastDueNotWorse": "past_due_30_59",
@@ -34,6 +41,10 @@ def load_raw(path: Path = RAW_PATH) -> pd.DataFrame:
         na_values="?",  # OpenML usa '?' para missing values
     )
     df = df.rename(columns=COLUMN_RENAME)
+    # OpenML encodes target as 'Yes'/'No' strings — map to 1/0
+    if not pd.api.types.is_integer_dtype(df["target"]):
+        yes_no_map = {"Yes": 1, "No": 0, "1": 1, "0": 0}
+        df["target"] = df["target"].astype(str).map(yes_no_map).astype(int)
     return df
 
 
@@ -55,13 +66,17 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     df = load_raw()
-    print(f"Raw shape: {df.shape}")
-    print(f"Target rate: {df['target'].mean():.4f}")
-    print(f"Missing:\n{df.isna().sum()[df.isna().sum() > 0]}")
+    logger.info("Raw shape: %s", df.shape)
+    logger.info("Target rate: %.4f", df["target"].mean())
+    logger.info("Missing:\n%s", df.isna().sum()[df.isna().sum() > 0])
 
     df_clean = clean(df)
-    print("\nApós clean:")
-    print(f"  had_past_due_sentinel: {df_clean['had_past_due_sentinel'].sum()} linhas")
-    print("  Missing em past_due após tratar sentinel:")
-    print(df_clean[PAST_DUE_COLS].isna().sum())
+    logger.info("\nApós clean:")
+    logger.info(
+        "  had_past_due_sentinel: %d linhas", df_clean["had_past_due_sentinel"].sum()
+    )
+    logger.info("  Missing em past_due após tratar sentinel:")
+    logger.info("%s", df_clean[PAST_DUE_COLS].isna().sum())
