@@ -246,7 +246,7 @@ chmod +x start-from-scratch.sh start.sh
 - Notebook execution can take **several minutes** (XGBoost + SHAP). Override per-notebook timeout with `ECS_NB_TIMEOUT` (seconds, default `3600`).
 - Press **Ctrl+C** to stop all services started by `start.sh`.
 
-If you already have the four pickle files above, use **`./start.sh`** only (no retrain). `start.sh` runs [`scripts/normalize_env.py`](scripts/normalize_env.py) first so a stale `MODEL_PATH` (e.g. `models/xgboost_credit.pkl`) is rewritten when the notebook outputs exist, and so legacy `calibration_path` / `CALIBRATION_PATH` lines (same Pydantic field as `CALIBRATOR_PATH`) are removed when `models/xgboost_financial_calibrator.pkl` exists.
+If you already have the four pickle files above, use **`./start.sh`** only (no retrain). It runs [`scripts/normalize_env.py`](scripts/normalize_env.py) and clears conflicting calibrator env exports before Uvicorn — details under **Demo data & environment helpers** below.
 
 ### Local (manual)
 
