@@ -200,7 +200,7 @@ export default function HistoryPage() {
         </p>
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-transparent border-0">
         <CardHeader className="flex-row items-center justify-between gap-4">
           <CardTitle className="text-sm font-medium text-zinc-300">
             Avaliações
@@ -272,7 +272,7 @@ export default function HistoryPage() {
                 {items.map((ev) => (
                   <Fragment key={ev.request_id}>
                     <TableRow
-                      className="border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors"
+                      className="cursor-pointer transition-colors" style={{borderBottom:"1px solid rgba(0,230,118,0.06)"}} onMouseEnter={(e)=>{(e.currentTarget as HTMLElement).style.background="rgba(0,230,118,0.05)"}} onMouseLeave={(e)=>{(e.currentTarget as HTMLElement).style.background=""}}
                       onClick={() =>
                         setExpanded((prev) =>
                           prev === ev.request_id ? null : ev.request_id

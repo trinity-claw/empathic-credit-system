@@ -64,8 +64,14 @@ export function ShapChart({ factors }: ShapChartProps) {
           axisLine={false}
         />
         <Tooltip
-          contentStyle={{ background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 }}
-          labelStyle={{ color: "#e4e4e7", fontSize: 12 }}
+          contentStyle={{
+            background: "#0a120a",
+            border: "1px solid rgba(0,230,118,0.2)",
+            borderRadius: 8,
+            color: "#e8f5e9",
+          }}
+          labelStyle={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}
+          itemStyle={{ color: "#e8f5e9" }}
           formatter={(v) => { const n = Number(v); return [`${n > 0 ? "+" : ""}${n.toFixed(4)}`, "SHAP"]; }}
         />
         <ReferenceLine x={0} stroke="#52525b" />

@@ -52,7 +52,7 @@ function StatsSkeletons() {
   return (
     <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
       {[...Array(4)].map((_, i) => (
-        <Card key={i} className="bg-zinc-900 border-zinc-800">
+        <Card key={i} className="bg-transparent border-0">
           <CardHeader className="pb-2">
             <Skeleton className="h-3 w-24 bg-zinc-800" />
           </CardHeader>
@@ -152,14 +152,15 @@ export default function DashboardPage() {
 
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
         {/* Recent evaluations */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-transparent border-0">
           <CardHeader className="flex-row items-center justify-between">
             <CardTitle className="text-sm font-medium text-zinc-300">
               Avaliações Recentes
             </CardTitle>
             <Link
               href="/history"
-              className="flex items-center gap-1 text-xs text-indigo-400 hover:text-indigo-300"
+              className="flex items-center gap-1 text-xs hover:underline"
+              style={{ color: "#00e676" }}
             >
               Ver todas <ArrowRight className="h-3 w-3" />
             </Link>
@@ -171,7 +172,7 @@ export default function DashboardPage() {
               <div className="flex flex-col items-center gap-2 py-8 text-zinc-600">
                 <InboxIcon className="h-8 w-8" />
                 <p className="text-sm">Nenhuma avaliação ainda.</p>
-                <Link href="/evaluate" className="text-xs text-indigo-400 hover:underline">
+                <Link href="/evaluate" className="text-xs hover:underline" style={{ color: "#00e676" }}>
                   Fazer a primeira avaliação →
                 </Link>
               </div>
@@ -215,7 +216,7 @@ export default function DashboardPage() {
         </Card>
 
         {/* Tier distribution */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-transparent border-0">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-zinc-300">
               Distribuição por Tier de Score
@@ -232,7 +233,7 @@ export default function DashboardPage() {
             ) : (
               <ResponsiveContainer width="100%" height={200}>
                 <BarChart data={tierData} margin={{ left: 0, right: 16 }}>
-                  <CartesianGrid vertical={false} stroke="#27272a" />
+                  <CartesianGrid vertical={false} stroke="rgba(0,230,118,0.07)" />
                   <XAxis
                     dataKey="range"
                     tick={{ fill: "#a1a1aa", fontSize: 12 }}
@@ -247,11 +248,13 @@ export default function DashboardPage() {
                   />
                   <Tooltip
                     contentStyle={{
-                      background: "#18181b",
-                      border: "1px solid #3f3f46",
+                      background: "#0a120a",
+                      border: "1px solid rgba(0,230,118,0.2)",
                       borderRadius: 8,
+                      color: "#e8f5e9",
                     }}
-                    labelStyle={{ color: "#e4e4e7", fontSize: 12 }}
+                    labelStyle={{ color: "rgba(255,255,255,0.6)", fontSize: 12 }}
+                    itemStyle={{ color: "#e8f5e9" }}
                     formatter={(v) => [v, "Avaliações"]}
                   />
                   <Bar dataKey="count" radius={[4, 4, 0, 0]}>
@@ -271,7 +274,7 @@ export default function DashboardPage() {
 
       {/* Credit product tiers + design decisions */}
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-transparent border-0">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-zinc-300">
               Produtos de Crédito — Tiers
@@ -323,7 +326,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-transparent border-0">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-zinc-300">
               Decisões de Design

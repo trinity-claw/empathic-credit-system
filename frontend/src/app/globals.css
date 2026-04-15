@@ -46,88 +46,112 @@
   --radius-2xl: calc(var(--radius) * 1.8);
   --radius-3xl: calc(var(--radius) * 2.2);
   --radius-4xl: calc(var(--radius) * 2.6);
+
+  /* InfinityPay brand tokens */
+  --color-ip-green: #00e676;
+  --color-ip-green-muted: rgba(0, 230, 118, 0.12);
+  --color-ip-green-border: rgba(0, 230, 118, 0.22);
+  --color-ip-cyan: #00bcd4;
 }
 
+/* ── App always runs in dark mode ───────────────────────────── */
 :root {
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
-  --card: oklch(1 0 0);
-  --card-foreground: oklch(0.145 0 0);
-  --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.205 0 0);
-  --primary-foreground: oklch(0.985 0 0);
-  --secondary: oklch(0.97 0 0);
-  --secondary-foreground: oklch(0.205 0 0);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.97 0 0);
-  --accent-foreground: oklch(0.205 0 0);
-  --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0);
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --background: #080c08;
+  --foreground: #e8f5e9;
+  --card: rgba(12, 20, 12, 0.85);
+  --card-foreground: #e8f5e9;
+  --popover: #0e180e;
+  --popover-foreground: #e8f5e9;
+  --primary: #00e676;
+  --primary-foreground: #080c08;
+  --secondary: rgba(0, 230, 118, 0.1);
+  --secondary-foreground: #e8f5e9;
+  --muted: rgba(255, 255, 255, 0.06);
+  --muted-foreground: rgba(255, 255, 255, 0.45);
+  --accent: rgba(0, 230, 118, 0.1);
+  --accent-foreground: #e8f5e9;
+  --destructive: #ef4444;
+  --border: rgba(255, 255, 255, 0.08);
+  --input: rgba(255, 255, 255, 0.07);
+  --ring: rgba(0, 230, 118, 0.4);
+  --chart-1: #00e676;
+  --chart-2: #00bcd4;
+  --chart-3: #4ade80;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
   --radius: 0.625rem;
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.205 0 0);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
+  --sidebar: rgba(8, 14, 8, 0.95);
+  --sidebar-foreground: #e8f5e9;
+  --sidebar-primary: #00e676;
+  --sidebar-primary-foreground: #080c08;
+  --sidebar-accent: rgba(0, 230, 118, 0.1);
+  --sidebar-accent-foreground: #e8f5e9;
+  --sidebar-border: rgba(0, 230, 118, 0.12);
+  --sidebar-ring: rgba(0, 230, 118, 0.4);
 }
 
-.dark {
-  --background: oklch(0.145 0 0);
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.922 0 0);
-  --primary-foreground: oklch(0.205 0 0);
-  --secondary: oklch(0.269 0 0);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.269 0 0);
-  --accent-foreground: oklch(0.985 0 0);
-  --destructive: oklch(0.704 0.191 22.216);
-  --border: oklch(1 0 0 / 10%);
-  --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.488 0.243 264.376);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
-  --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+/* ── Background glow blobs ──────────────────────────────────── */
+.bg-blob {
+  position: fixed;
+  border-radius: 50%;
+  filter: blur(120px);
+  pointer-events: none;
+  z-index: 0;
 }
 
+.bg-blob-green {
+  width: 520px;
+  height: 520px;
+  top: -80px;
+  left: -80px;
+  background: radial-gradient(circle, rgba(0, 230, 118, 0.07) 0%, transparent 70%);
+}
+
+.bg-blob-cyan {
+  width: 420px;
+  height: 420px;
+  bottom: -60px;
+  right: -60px;
+  background: radial-gradient(circle, rgba(0, 188, 212, 0.05) 0%, transparent 70%);
+}
+
+/* ── Base styles ────────────────────────────────────────────── */
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
+
   html {
     @apply font-sans;
     font-feature-settings: "cv11", "ss01";
     -webkit-font-smoothing: antialiased;
     -moz-osx-font-smoothing: grayscale;
   }
+
   body {
-    @apply bg-background text-foreground font-sans;
+    @apply font-sans;
+    background-color: var(--background);
+    color: var(--foreground);
+  }
+
+  /* Recharts / chart tooltips — ensure text is always visible */
+  .recharts-tooltip-wrapper .recharts-default-tooltip {
+    background-color: #0e180e !important;
+    border: 1px solid rgba(0, 230, 118, 0.2) !important;
+    border-radius: 8px !important;
+    color: #e8f5e9 !important;
+  }
+
+  .recharts-tooltip-item {
+    color: #e8f5e9 !important;
+  }
+
+  .recharts-tooltip-label {
+    color: rgba(255, 255, 255, 0.7) !important;
+  }
+
+  /* Table row hover — keep text visible */
+  tr:hover td {
+    color: inherit;
   }
 }

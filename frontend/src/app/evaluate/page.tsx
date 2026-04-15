@@ -128,7 +128,7 @@ export default function EvaluatePage() {
 
       <div className="grid grid-cols-1 gap-8 xl:grid-cols-2">
         {/* Form */}
-        <Card className="bg-zinc-900 border-zinc-800">
+        <Card className="bg-transparent border-0">
           <CardHeader>
             <CardTitle className="text-sm font-medium text-zinc-300">
               Dados do Tomador
@@ -145,7 +145,7 @@ export default function EvaluatePage() {
                       step="any"
                       value={form[key] ?? ""}
                       onChange={(e) => handleChange(key, e.target.value)}
-                      className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm h-8 focus-visible:ring-indigo-500"
+                      className="text-sm h-8" style={{background:"rgba(0,230,118,0.06)",border:"1px solid rgba(0,230,118,0.15)",color:"#e8f5e9"}}
                     />
                   </div>
                 ))}
@@ -171,7 +171,7 @@ export default function EvaluatePage() {
               </button>
 
               {showEmotional && (
-                <div className="grid grid-cols-2 gap-4 rounded-lg bg-zinc-800/50 p-4 border border-zinc-800">
+                <div className="grid grid-cols-2 gap-4 rounded-lg p-4" style={{background:"rgba(0,230,118,0.05)",border:"1px solid rgba(0,230,118,0.1)"}}>
                   {EMOTIONAL_LABELS.map(({ key, label, hint }) => (
                     <div key={key} className="space-y-1.5">
                       <Label className="text-xs text-zinc-400">
@@ -183,7 +183,7 @@ export default function EvaluatePage() {
                         step="any"
                         value={form[key] ?? ""}
                         onChange={(e) => handleChange(key, e.target.value)}
-                        className="bg-zinc-800 border-zinc-700 text-zinc-100 text-sm h-8 focus-visible:ring-indigo-500"
+                        className="text-sm h-8" style={{background:"rgba(0,230,118,0.06)",border:"1px solid rgba(0,230,118,0.15)",color:"#e8f5e9"}}
                       />
                     </div>
                   ))}
@@ -217,7 +217,7 @@ export default function EvaluatePage() {
         {/* Result */}
         {result ? (
           <div className="space-y-5">
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-transparent border-0">
               <CardContent className="pt-6">
                 <div className="flex items-start justify-between">
                   <div>
@@ -324,7 +324,7 @@ export default function EvaluatePage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-transparent border-0">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-zinc-300">
                   Explicação SHAP — Top Fatores
@@ -338,7 +338,7 @@ export default function EvaluatePage() {
               </CardContent>
             </Card>
 
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-transparent border-0">
               <CardHeader>
                 <CardTitle className="text-sm font-medium text-zinc-300">
                   Todos os Valores SHAP
