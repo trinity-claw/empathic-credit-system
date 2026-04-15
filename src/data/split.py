@@ -62,7 +62,10 @@ def save_splits(splits: dict[str, pd.DataFrame], out_dir: Path = PROCESSED_DIR) 
         df.to_parquet(path, index=False)
         logger.info(
             "  %s: %d rows, %.4f positive rate -> %s",
-            name, len(df), df[TARGET].mean(), path,
+            name,
+            len(df),
+            df[TARGET].mean(),
+            path,
         )
 
 
