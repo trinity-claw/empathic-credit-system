@@ -40,3 +40,14 @@ services:
     depends_on:
       redis:
         condition: service_healthy
+
+  dashboard:
+    build: .
+    command: uv run streamlit run streamlit_app.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - ./data:/app/data
+      - ./models:/app/models
+    depends_on:
+      - api

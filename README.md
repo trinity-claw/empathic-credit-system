@@ -163,7 +163,20 @@ docker compose up --build
 ```
 
 API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-Default credentials: `admin` / `changeme`.
+Dashboard at `http://localhost:8501`. Default credentials: `admin` / `changeme`.
+
+### Dashboard (Streamlit)
+
+```bash
+uv run streamlit run streamlit_app.py
+```
+
+Opens at `http://localhost:8501` with 5 pages:
+- **Score Distribution** — histogram of calibrated probabilities and credit scores
+- **Credit Products** — pie chart of approved tier breakdown (short/long term)
+- **Emotional Trends** — simulated time series of stress/impulsivity/stability
+- **Fairness** — approval rates by age and income cohort with 4/5ths rule threshold
+- **SHAP Explorer** — interactive per-borrower SHAP waterfall (requires trained models)
 
 ---
 
