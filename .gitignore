@@ -7,7 +7,7 @@ __pycache__/
 .pytest_cache/
 .ruff_cache/
 
-# Data & models — nunca versionar
+# Data & models — não versionar artefatos gerados
 data/*.db
 data/raw/*
 data/processed/*
@@ -29,3 +29,16 @@ models/*.json
 .vscode/
 .idea/
 .DS_Store
+
+# Cursor IDE (regras internas do assistente — não relevante para o avaliador)
+.cursor/
+
+# Documentos de preparação pessoal — não fazem parte da entrega técnica
+docs/presentation_script.md
+docs/study_guide.md
+
+# Frontend — dependências e build
+frontend/node_modules/
+frontend/.next/
+frontend/out/
+frontend/.env.local

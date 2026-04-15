@@ -163,20 +163,21 @@ docker compose up --build
 ```
 
 API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
-Dashboard at `http://localhost:8501`. Default credentials: `admin` / `changeme`.
+Frontend dashboard at `http://localhost:3000`. Default API credentials: `admin` / `changeme`.
 
-### Dashboard (Streamlit)
+### Frontend (Next.js + shadcn/ui)
 
 ```bash
-uv run streamlit run streamlit_app.py
+cd frontend
+npm install
+npm run dev
 ```
 
-Opens at `http://localhost:8501` with 5 pages:
-- **Score Distribution** — histogram of calibrated probabilities and credit scores
-- **Credit Products** — pie chart of approved tier breakdown (short/long term)
-- **Emotional Trends** — simulated time series of stress/impulsivity/stability
-- **Fairness** — approval rates by age and income cohort with 4/5ths rule threshold
-- **SHAP Explorer** — interactive per-borrower SHAP waterfall (requires trained models)
+Opens at `http://localhost:3000` with 4 pages:
+- **Dashboard** — KPI cards (AUC, KS, Brier), recent decisions, credit product tiers
+- **Avaliar Crédito** — interactive form: submit borrower data, receive score + SHAP waterfall
+- **Analytics** — ROC curve, calibration plot, score distribution, model comparison
+- **Fairness** — 4/5ths rule by age/income cohort, LGPD regulatory risk analysis
 
 ---
 
