@@ -39,6 +39,7 @@ def client():
         patch("src.api.model_store.predict", return_value=_MOCK_RESULT),
         patch("src.api.db.init_db"),
         patch("src.api.db.save_evaluation"),
+        patch("src.api.db.log_event"),
     ):
         from src.api.main import app
 

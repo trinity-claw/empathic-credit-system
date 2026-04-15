@@ -35,6 +35,28 @@ class CreditEvaluation(Base):
     shap_explanation: Mapped[dict] = mapped_column(JSON)
 
 
+class CreditEvent(Base):
+    """Audit trail: lifecycle events for each evaluation request."""
+
+    __tablename__ = "credit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(36), index=True)
+    event_type: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+def log_event(request_id: str, event_type: str, detail: dict | None = None) -> None:
+    """Record an audit event for a credit evaluation."""
+    record = CreditEvent(request_id=request_id, event_type=event_type, detail=detail)
+    with get_session() as session:
+        session.add(record)
+        session.commit()
+
+
 def init_db() -> None:
     """Create tables if they don't exist."""
     engine = _get_engine()

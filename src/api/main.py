@@ -9,7 +9,7 @@ from pythonjsonlogger.json import JsonFormatter
 
 from src.api import model_store
 from src.api.auth import require_auth
-from src.api.db import init_db, save_evaluation
+from src.api.db import init_db, log_event, save_evaluation
 from src.api.schemas import (
     AsyncJobResponse,
     CreditRequest,
@@ -81,11 +81,14 @@ def evaluate_credit(
     """Synchronous credit evaluation with SHAP explanation."""
     request_id = str(uuid.uuid4())
     logger.info("Synchronous evaluation", extra={"request_id": request_id})
+    log_event(request_id, "request_received")
 
     result = model_store.predict(
         request.model_dump(),
         use_emotional=request.has_emotional_features,
     )
+    log_event(request_id, "model_scored", {"model": result["model_used"]})
+
     response = _build_response(request_id, result)
     save_evaluation(
         request_id=request_id,
@@ -96,6 +99,7 @@ def evaluate_credit(
         request_payload=request.model_dump(),
         shap_explanation=result["shap_explanation"],
     )
+    log_event(request_id, "decision_made", {"decision": result["decision"]})
     return response
 
 

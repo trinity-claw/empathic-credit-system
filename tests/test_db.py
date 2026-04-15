@@ -6,7 +6,7 @@ import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.orm import Session
 
-from src.api.db import Base, CreditEvaluation, save_evaluation
+from src.api.db import Base, CreditEvaluation, CreditEvent, log_event, save_evaluation
 
 
 @pytest.fixture()
@@ -68,3 +68,32 @@ class TestSaveEvaluation:
 
         assert isinstance(record.request_payload, dict)
         assert record.request_payload["age"] == 45
+
+
+class TestCreditEvent:
+    def test_creates_events_table(self, _use_memory_db):
+        engine = _use_memory_db
+        with engine.connect() as conn:
+            result = conn.execute(
+                text("SELECT name FROM sqlite_master WHERE type='table'")
+            )
+            tables = [row[0] for row in result]
+        assert "credit_events" in tables
+
+    def test_log_event_persists(self, _use_memory_db):
+        engine = _use_memory_db
+        log_event("req-001", "request_received")
+        log_event("req-001", "model_scored", {"model": "xgboost_financial"})
+
+        with Session(engine) as session:
+            events = (
+                session.query(CreditEvent)
+                .filter_by(request_id="req-001")
+                .order_by(CreditEvent.id)
+                .all()
+            )
+
+        assert len(events) == 2
+        assert events[0].event_type == "request_received"
+        assert events[1].event_type == "model_scored"
+        assert events[1].detail["model"] == "xgboost_financial"
