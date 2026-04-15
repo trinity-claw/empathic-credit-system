@@ -1,10 +1,11 @@
 import type { Metadata } from "next";
-import { Geist } from "next/font/google";
+import { Inter } from "next/font/google";
 import "./globals.css";
 import { Sidebar } from "@/components/sidebar";
 import { Toaster } from "sonner";
 
-const geist = Geist({ subsets: ["latin"], variable: "--font-geist" });
+// Inter is the industry standard for dashboards — crisp, legible, neutral
+const inter = Inter({ subsets: ["latin"], variable: "--font-sans" });
 
 export const metadata: Metadata = {
   title: "Empathic Credit System",
@@ -13,7 +14,7 @@ export const metadata: Metadata = {
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="pt-BR" className={`${geist.variable} h-full`} suppressHydrationWarning>
+    <html lang="pt-BR" className={`${inter.variable} h-full`} suppressHydrationWarning>
       <body className="h-full bg-zinc-950 text-zinc-100 antialiased">
         <div className="flex h-full">
           <Sidebar />
