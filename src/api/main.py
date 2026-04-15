@@ -9,7 +9,7 @@ from pythonjsonlogger.json import JsonFormatter
 
 from src.api import model_store
 from src.api.auth import require_auth
-from src.api.db import init_db, save_evaluation
+from src.api.db import init_db, log_event, save_evaluation
 from src.api.schemas import (
     AsyncJobResponse,
     CreditRequest,
@@ -20,10 +20,14 @@ from src.api.schemas import (
 from src.api.settings import get_settings
 from src.api.worker import enqueue_evaluation, get_job_result
 
-# Structured JSON logging
+# Structured JSON logging — level driven by Settings.log_level
+_settings = get_settings()
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
-logging.basicConfig(level=logging.INFO, handlers=[handler])
+logging.basicConfig(
+    level=getattr(logging, _settings.log_level.upper(), logging.INFO),
+    handlers=[handler],
+)
 logger = logging.getLogger(__name__)
 
 
@@ -55,11 +59,10 @@ def health():
     )
 
 
-def _build_response(
-    request_id: str, result: dict, request: CreditRequest
-) -> CreditResponse:
+def _build_response(request_id: str, result: dict) -> CreditResponse:
+    """Pure transformation: model output dict -> CreditResponse. No side effects."""
     top_factors = [ShapFactor(**f) for f in result["top_factors"]]
-    resp = CreditResponse(
+    return CreditResponse(
         request_id=uuid.UUID(request_id),
         decision=result["decision"],
         probability_of_default=result["probability_of_default"],
@@ -68,16 +71,6 @@ def _build_response(
         shap_explanation=result["shap_explanation"],
         top_factors=top_factors,
     )
-    save_evaluation(
-        request_id=request_id,
-        decision=result["decision"],
-        probability=result["probability_of_default"],
-        score=result["score"],
-        model_used=result["model_used"],
-        request_payload=request.model_dump(),
-        shap_explanation=result["shap_explanation"],
-    )
-    return resp
 
 
 @app.post("/credit/evaluate", response_model=CreditResponse, tags=["credit"])
@@ -88,12 +81,26 @@ def evaluate_credit(
     """Synchronous credit evaluation with SHAP explanation."""
     request_id = str(uuid.uuid4())
     logger.info("Synchronous evaluation", extra={"request_id": request_id})
+    log_event(request_id, "request_received")
 
     result = model_store.predict(
         request.model_dump(),
         use_emotional=request.has_emotional_features,
     )
-    return _build_response(request_id, result, request)
+    log_event(request_id, "model_scored", {"model": result["model_used"]})
+
+    response = _build_response(request_id, result)
+    save_evaluation(
+        request_id=request_id,
+        decision=result["decision"],
+        probability=result["probability_of_default"],
+        score=result["score"],
+        model_used=result["model_used"],
+        request_payload=request.model_dump(),
+        shap_explanation=result["shap_explanation"],
+    )
+    log_event(request_id, "decision_made", {"decision": result["decision"]})
+    return response
 
 
 @app.post("/credit/evaluate/async", response_model=AsyncJobResponse, tags=["credit"])
@@ -115,11 +122,6 @@ def get_evaluation_result(
     """Poll the result of an async credit evaluation."""
     status, result = get_job_result(job_id)
     if status == "finished" and result is not None:
-        top_factors = [ShapFactor(**f) for f in result["top_factors"]]
-        credit_resp = CreditResponse(
-            request_id=uuid.uuid4(),
-            **{k: v for k, v in result.items() if k not in ("top_factors",)},
-            top_factors=top_factors,
-        )
+        credit_resp = _build_response(str(uuid.uuid4()), result)
         return AsyncJobResponse(job_id=job_id, status=status, result=credit_resp)
     return AsyncJobResponse(job_id=job_id, status=status)

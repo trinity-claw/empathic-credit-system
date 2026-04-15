@@ -2,6 +2,9 @@
 
 import numpy as np
 import pandas as pd
+from sklearn.impute import SimpleImputer
+from sklearn.linear_model import Ridge
+from sklearn.pipeline import Pipeline
 
 from src.data.emotional import EMOTIONAL_FEATURES, inject_emotional_features
 
@@ -67,10 +70,6 @@ class TestInjectEmotionalFeatures:
 
     def test_r2_below_threshold(self):
         """Emotional features must not be too redundant with financial ones."""
-        from sklearn.impute import SimpleImputer
-        from sklearn.linear_model import Ridge
-        from sklearn.pipeline import Pipeline
-
         df = _make_dummy_df(n=500)
         result = inject_emotional_features(df)
         fin_features = [c for c in df.columns if c != "target"]

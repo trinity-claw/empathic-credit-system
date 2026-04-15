@@ -1,9 +1,8 @@
 """SQLAlchemy + SQLite database layer."""
 
-import json
 from datetime import datetime, timezone
 
-from sqlalchemy import JSON, DateTime, Float, String, Text, create_engine
+from sqlalchemy import JSON, DateTime, Float, String, create_engine
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
 from src.api.settings import get_settings
@@ -32,8 +31,30 @@ class CreditEvaluation(Base):
     probability_of_default: Mapped[float] = mapped_column(Float)
     score: Mapped[int]
     model_used: Mapped[str] = mapped_column(String(64))
-    request_payload: Mapped[str] = mapped_column(Text)
+    request_payload: Mapped[dict] = mapped_column(JSON)
     shap_explanation: Mapped[dict] = mapped_column(JSON)
+
+
+class CreditEvent(Base):
+    """Audit trail: lifecycle events for each evaluation request."""
+
+    __tablename__ = "credit_events"
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True)
+    request_id: Mapped[str] = mapped_column(String(36), index=True)
+    event_type: Mapped[str] = mapped_column(String(32))
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
+    )
+    detail: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+
+
+def log_event(request_id: str, event_type: str, detail: dict | None = None) -> None:
+    """Record an audit event for a credit evaluation."""
+    record = CreditEvent(request_id=request_id, event_type=event_type, detail=detail)
+    with get_session() as session:
+        session.add(record)
+        session.commit()
 
 
 def init_db() -> None:
@@ -64,7 +85,7 @@ def save_evaluation(
         probability_of_default=probability,
         score=score,
         model_used=model_used,
-        request_payload=json.dumps(request_payload),
+        request_payload=request_payload,
         shap_explanation=shap_explanation,
     )
     with get_session() as session:

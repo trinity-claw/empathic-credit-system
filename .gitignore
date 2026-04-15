@@ -8,6 +8,7 @@ __pycache__/
 .ruff_cache/
 
 # Data & models — nunca versionar
+data/*.db
 data/raw/*
 data/processed/*
 !data/raw/.gitkeep

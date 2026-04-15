@@ -1,7 +1,11 @@
 """Data loading and basic cleaning for Give Me Some Credit."""
 
+import logging
 from pathlib import Path
+
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 RAW_PATH = Path("data/raw/cs-training.csv")
 
@@ -62,13 +66,17 @@ def clean(df: pd.DataFrame) -> pd.DataFrame:
 
 
 if __name__ == "__main__":
+    logging.basicConfig(level=logging.INFO, format="%(message)s")
+
     df = load_raw()
-    print(f"Raw shape: {df.shape}")
-    print(f"Target rate: {df['target'].mean():.4f}")
-    print(f"Missing:\n{df.isna().sum()[df.isna().sum() > 0]}")
+    logger.info("Raw shape: %s", df.shape)
+    logger.info("Target rate: %.4f", df["target"].mean())
+    logger.info("Missing:\n%s", df.isna().sum()[df.isna().sum() > 0])
 
     df_clean = clean(df)
-    print("\nApós clean:")
-    print(f"  had_past_due_sentinel: {df_clean['had_past_due_sentinel'].sum()} linhas")
-    print("  Missing em past_due após tratar sentinel:")
-    print(df_clean[PAST_DUE_COLS].isna().sum())
+    logger.info("\nApós clean:")
+    logger.info(
+        "  had_past_due_sentinel: %d linhas", df_clean["had_past_due_sentinel"].sum()
+    )
+    logger.info("  Missing em past_due após tratar sentinel:")
+    logger.info("%s", df_clean[PAST_DUE_COLS].isna().sum())

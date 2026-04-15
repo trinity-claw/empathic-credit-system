@@ -5,6 +5,18 @@ from uuid import UUID, uuid4
 
 from pydantic import BaseModel, Field
 
+EMOTIONAL_FIELD_NAMES = (
+    "stress_level",
+    "impulsivity_score",
+    "emotional_stability",
+    "financial_stress_events_7d",
+)
+
+
+def has_emotional_data(data: dict) -> bool:
+    """Check if all four emotional fields are present and non-None."""
+    return all(data.get(f) is not None for f in EMOTIONAL_FIELD_NAMES)
+
 
 class CreditRequest(BaseModel):
     """Input for a credit evaluation request.
@@ -45,6 +57,7 @@ class CreditRequest(BaseModel):
     )
 
     # Emotional features (optional — triggers emotional model when provided)
+    # If all four are provided, the emotional model is used instead.
     stress_level: float | None = Field(
         default=None, ge=0, le=1, description="Stress level [0,1]"
     )
@@ -58,17 +71,29 @@ class CreditRequest(BaseModel):
         default=None, ge=0, le=20, description="Stress events last 7 days"
     )
 
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "revolving_utilization": 0.30,
+                    "age": 45,
+                    "past_due_30_59": 0.0,
+                    "debt_ratio": 0.20,
+                    "monthly_income": 5000.0,
+                    "open_credit_lines": 4,
+                    "past_due_90": 0.0,
+                    "real_estate_loans": 1,
+                    "past_due_60_89": 0.0,
+                    "dependents": 2.0,
+                    "had_past_due_sentinel": 0,
+                }
+            ]
+        }
+    }
+
     @property
     def has_emotional_features(self) -> bool:
-        return all(
-            f is not None
-            for f in [
-                self.stress_level,
-                self.impulsivity_score,
-                self.emotional_stability,
-                self.financial_stress_events_7d,
-            ]
-        )
+        return has_emotional_data(self.model_dump())
 
 
 class ShapFactor(BaseModel):
@@ -87,6 +112,32 @@ class CreditResponse(BaseModel):
     model_used: str
     shap_explanation: dict[str, Any]
     top_factors: list[ShapFactor]
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "request_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+                    "decision": "APPROVED",
+                    "probability_of_default": 0.042,
+                    "score": 958,
+                    "model_used": "xgboost_financial_calibrated",
+                    "shap_explanation": {
+                        "base_value": -2.63,
+                        "prediction": -3.13,
+                        "contributions": {"age": -0.28, "past_due_90": 0.01},
+                    },
+                    "top_factors": [
+                        {
+                            "feature": "age",
+                            "contribution": -0.28,
+                            "direction": "decreases_risk",
+                        }
+                    ],
+                }
+            ]
+        }
+    }
 
 
 class AsyncJobResponse(BaseModel):
