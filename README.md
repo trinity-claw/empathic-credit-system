@@ -316,6 +316,20 @@ Opens at `http://localhost:3000` with 5 pages:
 - **Analytics** — operational metrics (live) + ROC curve, calibration plot, model comparison (training data)
 - **Fairness** — 4/5ths rule by age/income cohort, LGPD regulatory risk analysis
 
+### Demo data & environment helpers
+
+With the API running (`./start.sh` or `docker compose up`), you can fill **`data/ecs.db`** with many synthetic credit decisions (mix of **clear approvals**, **clear denials**, **borderline** financial-only cases, emotional-model paths including a “rescue” profile) plus emotion-stream rows for the dashboard:
+
+```bash
+uv run python scripts/seed_frontend_demo.py
+```
+
+Use `ECS_API_BASE` (default `http://127.0.0.1:8000`), `API_USERNAME`, and `API_PASSWORD` if they differ from defaults; flags `--sleep` and `--timeout` throttle SHAP-heavy requests.
+
+**`.env` vs trained files:** `start.sh` / `start-from-scratch.sh` invoke [`scripts/normalize_env.py`](scripts/normalize_env.py) so missing paths point at the four pickles under `models/` when those files exist, and legacy **`calibration_path` / `CALIBRATION_PATH`** lines are removed from `.env` (they map to the same field as `CALIBRATOR_PATH`). `start.sh` also **`unset`s `CALIBRATION_PATH` / `calibration_path`** in the shell before Uvicorn so stray exports do not override a cleaned `.env`.
+
+**Settings:** [`src/api/settings.py`](src/api/settings.py) coalesces legacy calibrator keys during model validation so pydantic-settings does not treat `CALIBRATION_PATH` from the process environment as an extra forbidden field when `CALIBRATOR_PATH` is also set.
+
 ---
 
 ## API Usage

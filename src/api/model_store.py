@@ -2,6 +2,7 @@
 
 import logging
 import time
+from pathlib import Path
 from typing import Any
 
 import joblib
@@ -88,13 +89,25 @@ FINANCIAL_FEATURES = [
 _store: dict[str, Any] = {}
 
 
+def _load_joblib(path: str, label: str) -> Any:
+    if not Path(path).is_file():
+        msg = (
+            f"{label}: missing file {path!r}. "
+            "Fix MODEL_PATH / CALIBRATOR_PATH / … in .env to match files under models/, "
+            "or run ./start-from-scratch.sh (or notebooks 02–04). "
+            "Running ./start.sh also runs scripts/normalize_env.py when defaults exist."
+        )
+        raise FileNotFoundError(msg)
+    return joblib.load(path)
+
+
 def load_models() -> None:
     settings = get_settings()
 
-    fin_model = joblib.load(settings.model_path)
-    fin_cal = joblib.load(settings.calibrator_path)
-    emo_model = joblib.load(settings.emotional_model_path)
-    emo_cal = joblib.load(settings.emotional_calibrator_path)
+    fin_model = _load_joblib(settings.model_path, "Financial model")
+    fin_cal = _load_joblib(settings.calibrator_path, "Financial calibrator")
+    emo_model = _load_joblib(settings.emotional_model_path, "Emotional model")
+    emo_cal = _load_joblib(settings.emotional_calibrator_path, "Emotional calibrator")
 
     _store["fin_model"] = fin_model
     _store["fin_calibrator"] = fin_cal
