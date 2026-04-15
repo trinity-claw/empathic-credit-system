@@ -1,221 +1,221 @@
-# Presentation Script — Empathic Credit System
+# Roteiro da Apresentação — Empathic Credit System
 
-**Duration**: 30 minutes
-**Format**: Screen share + live demo
-**Audience**: Pablo (CEO), Leonardo, engineering team
-
----
-
-## 1. Opening (2 min)
-
-### What to say
-
-"I built a complete credit scoring system that:
-- Trains an XGBoost model achieving **AUC 0.87** and **KS 0.58** on held-out test data
-- Experimentally proved that emotional features add **zero predictive value** (AUC delta = -0.0008) and recommended against deployment
-- Implements disparate impact analysis using the **4/5ths rule** — a regulatory requirement for automated credit decisions
-- Serves predictions via FastAPI with **SHAP explanations on every response**, end-to-end audit trail, and async credit deployment"
-
-### Show
-
-- README.md Results table (3 models side-by-side)
-- One-liner: "Every single decision this system makes is explainable and auditable."
+**Duração**: 30 minutos
+**Formato**: Compartilhamento de tela + demo ao vivo
+**Audiência**: Pablo (CEO), Leonardo, equipe de engenharia
 
 ---
 
-## 2. System Architecture (5 min)
+## 1. Abertura (2 min)
 
-### What to say
+### O que falar
 
-"The architecture starts where the challenge says: at the customer's brain. The mobile app captures emotional sensor readings — stress, impulsivity, stability — and streams them to our API via `POST /emotions/stream`. These events are persisted to the database and published to Redis Pub/Sub for downstream consumers.
+"Eu construí um sistema completo de credit scoring que:
+- Treina um modelo XGBoost que atinge **AUC 0.87** e **KS 0.58** em dados de teste não vistos durante o treino
+- Provou experimentalmente que features emocionais **não agregam valor preditivo** (delta de AUC = -0.0008) e recomendou contra o deploy
+- Implementa análise de impacto disparatado usando a **regra dos 4/5** — um requisito regulatório para decisões automatizadas de crédito
+- Serve predições via FastAPI com **explicações SHAP em toda resposta**, trilha de auditoria completa e deploy assíncrono de crédito"
 
-When a credit evaluation is requested, the API runs the XGBoost model, calibrates the probability, maps it to a credit product (limit, rate, type), generates SHAP explanations, and returns everything in one response. If approved, a credit offer is created. The user can accept it, which triggers an async rq job that updates their profile and sends a notification.
+### Mostrar
 
-Every request gets a correlation ID via X-Request-ID middleware. Every lifecycle event is logged to the credit_events audit table."
-
-### Show
-
-- README architecture diagram (full ASCII from brain to notification)
-- `docker-compose.yml` — 4 services: api, worker, redis, dashboard
-- Quick scroll through `src/api/main.py` — the endpoints
-
-### Numbers to cite
-
-- 7 API endpoints
-- 7 database tables
-- X-Request-ID on every request/response with duration_ms
+- Tabela de resultados no README.md (3 modelos lado a lado)
+- Frase-chave: "Toda decisão que esse sistema toma é explicável e auditável."
 
 ---
 
-## 3. ML Pipeline (8 min)
+## 2. Arquitetura do Sistema (5 min)
 
-### 3a. Dataset and EDA (2 min)
+### O que falar
 
-"The dataset is Give Me Some Credit from Kaggle/OpenML — 150,000 borrowers with a 6.68% default rate. Strong class imbalance. Key findings from EDA:
-- `monthly_income` has ~20% missing values
-- `dependents` has ~2.6% missing
-- Sentinel values 96/98 in past_due columns (269 rows) — I flagged these with a binary `had_past_due_sentinel` feature
-- `revolving_utilization` has extreme outliers (max > 50,000) due to data quality issues"
+"A arquitetura começa onde o desafio pede: no cérebro do cliente. O app mobile captura leituras do sensor emocional — estresse, impulsividade, estabilidade — e faz stream para nossa API via `POST /emotions/stream`. Esses eventos são persistidos no banco de dados e publicados no Redis Pub/Sub para consumidores downstream.
 
-### Show
+Quando uma avaliação de crédito é solicitada, a API roda o modelo XGBoost, calibra a probabilidade, mapeia para um produto de crédito (limite, taxa, tipo), gera explicações SHAP e retorna tudo em uma resposta. Se aprovado, uma oferta de crédito é criada. O usuário pode aceitar, o que dispara um job assíncrono via rq que atualiza o perfil e envia uma notificação.
 
-- `notebooks/01_eda.ipynb` — distribution plots, missing value table
+Toda requisição recebe um ID de correlação via middleware X-Request-ID. Todo evento do ciclo de vida é logado na tabela credit_events."
+
+### Mostrar
+
+- Diagrama de arquitetura no README (ASCII completo do cérebro até notificação)
+- `docker-compose.yml` — 4 serviços: api, worker, redis, dashboard
+- Scroll rápido pelo `src/api/main.py` — os endpoints
+
+### Números para citar
+
+- 7 endpoints de API
+- 7 tabelas no banco de dados
+- X-Request-ID em toda requisição/resposta com duration_ms
+
+---
+
+## 3. Pipeline de ML (8 min)
+
+### 3a. Dataset e EDA (2 min)
+
+"O dataset é o Give Me Some Credit do Kaggle/OpenML — 150.000 tomadores de crédito com taxa de inadimplência de 6,68%. Desbalanceamento forte. Principais achados da EDA:
+- `monthly_income` tem ~20% de valores ausentes
+- `dependents` tem ~2,6% de missing
+- Valores sentinela 96/98 nas colunas de past_due (269 linhas) — eu sinalizei com uma feature binária `had_past_due_sentinel`
+- `revolving_utilization` tem outliers extremos (máximo > 50.000) por problemas de qualidade dos dados"
+
+### Mostrar
+
+- `notebooks/01_eda.ipynb` — gráficos de distribuição, tabela de missing values
 
 ### 3b. Baseline (2 min)
 
-"Started with Logistic Regression as baseline — Pipeline with SimpleImputer(median) + StandardScaler + LogReg(class_weight=balanced). Got **AUC 0.82** on validation. The coefficients make intuitive sense: past_due variables increase risk, age and income decrease it. This confirmed the data is clean and the target is well-defined."
+"Comecei com Regressão Logística como baseline — Pipeline com SimpleImputer(mediana) + StandardScaler + LogReg(class_weight=balanced). Obtive **AUC 0.82** na validação. Os coeficientes fazem sentido intuitivo: variáveis de past_due aumentam o risco, idade e renda diminuem. Isso confirmou que os dados estão limpos e o target está bem definido."
 
-### Show
+### Mostrar
 
-- `notebooks/02_baseline_logreg.ipynb` — coefficient bar chart
-- Point out: "These coefficients match credit risk intuition — if they didn't, we'd have a data problem."
+- `notebooks/02_baseline_logreg.ipynb` — gráfico de barras dos coeficientes
+- Destacar: "Esses coeficientes batem com a intuição de risco de crédito — se não batessem, teríamos um problema nos dados."
 
-### 3c. XGBoost + Calibration (2 min)
+### 3c. XGBoost + Calibração (2 min)
 
-"XGBoost pushed AUC to **0.87** on validation. But raw XGBoost probabilities are poorly calibrated — Brier score 0.055 raw vs **0.049 after IsotonicRegression calibration**. The calibration curve went from an S-curve to nearly diagonal.
+"O XGBoost levou o AUC para **0.87** na validação. Mas as probabilidades brutas do XGBoost são mal calibradas — Brier score 0.055 bruto vs **0.049 após calibração com IsotonicRegression**. A curva de calibração foi de um S para quase diagonal.
 
-I used isotonic regression rather than Platt scaling because the relationship between raw probabilities and true frequencies is non-linear for tree ensembles. The calibrator was fitted on validation data and the final evaluation was done on a held-out test set to confirm no overfitting."
+Usei regressão isotônica ao invés de Platt scaling porque a relação entre probabilidades brutas e frequências reais é não-linear para ensembles de árvores. O calibrador foi ajustado nos dados de validação e a avaliação final foi feita em um conjunto de teste separado para confirmar que não houve overfitting."
 
-### Numbers to cite
+### Números para citar
 
-| Metric | Baseline LogReg | XGBoost Raw | XGBoost Calibrated |
-|--------|----------------|-------------|-------------------|
-| AUC    | 0.8216         | 0.8676      | 0.8676            |
-| KS     | 0.5012         | 0.5764      | 0.5764            |
-| Brier  | 0.1545         | 0.0550      | 0.0488            |
+| Métrica | Baseline LogReg | XGBoost Bruto | XGBoost Calibrado |
+|---------|----------------|---------------|-------------------|
+| AUC     | 0.8216         | 0.8676        | 0.8676            |
+| KS      | 0.5012         | 0.5764        | 0.5764            |
+| Brier   | 0.1545         | 0.0550        | 0.0488            |
 
-### Show
+### Mostrar
 
-- `notebooks/03_xgboost.ipynb` — 4-panel evaluation plot (ROC, KS, calibration, confusion)
-- Test set results at the bottom
+- `notebooks/03_xgboost.ipynb` — plot de 4 painéis (ROC, KS, calibração, matriz de confusão)
+- Resultados no conjunto de teste no final
 
 ### 3d. SHAP (2 min)
 
-"Every prediction comes with SHAP values computed by TreeExplainer — exact Shapley values in O(TLD) time where T is trees, L is leaves, D is depth. This isn't an approximation.
+"Toda predição vem com valores SHAP computados pelo TreeExplainer — valores de Shapley exatos em tempo O(TLD) onde T é o número de árvores, L é folhas e D é profundidade. Não é uma aproximação.
 
-The top 5 risk factors are returned per request. The base value + sum of all SHAP values = model prediction in log-odds space. This gives us legally defensible explanations — LGPD Article 20 requires the right to explanation for automated decisions."
+Os top 5 fatores de risco são retornados por requisição. O base value + soma de todos os SHAP values = predição do modelo no espaço de log-odds. Isso nos dá explicações legalmente defensáveis — o Artigo 20 da LGPD exige o direito à explicação para decisões automatizadas."
 
-### Show
+### Mostrar
 
 - `notebooks/05_shap_analysis.ipynb` — summary plot (global) + waterfall (individual)
-- API response JSON showing `shap_explanation` and `top_factors`
+- JSON da resposta da API mostrando `shap_explanation` e `top_factors`
 
 ---
 
-## 4. Ethical Analysis (5 min)
+## 4. Análise Ética (5 min)
 
-### 4a. Emotional Features Experiment (3 min)
+### 4a. Experimento com Features Emocionais (3 min)
 
-"The challenge asks us to use emotional data. I took this seriously — I generated synthetic emotional features that are correlated with financial behavior (stress correlates with delinquency, impulsivity with credit utilization) but noisy enough that R-squared < 0.30 against financials.
+"O desafio pede para usar dados emocionais. Eu levei isso a sério — gerei features emocionais sintéticas que são correlacionadas com comportamento financeiro (estresse correlaciona com inadimplência, impulsividade com utilização de crédito) mas ruidosas o suficiente para que R² < 0,30 contra as financeiras.
 
-Result: the emotional model achieved AUC **0.8668** vs financial-only AUC **0.8676**. That's a delta of **-0.0008** — the emotional features actually hurt slightly. SHAP confirms: the emotional features have near-zero SHAP values compared to past_due_90, revolving_utilization, and age.
+Resultado: o modelo emocional atingiu AUC **0.8668** vs AUC do financial-only de **0.8676**. Delta de **-0.0008** — as features emocionais pioraram ligeiramente. SHAP confirma: as features emocionais têm valores SHAP próximos de zero comparadas com past_due_90, revolving_utilization e age.
 
-My recommendation: **do not deploy emotional features**. The privacy and regulatory cost is high (LGPD Article 11 — sensitive data), the technical cost is non-trivial (real-time sensor stream, consent management), and the predictive benefit is zero."
+Minha recomendação: **não fazer deploy das features emocionais**. O custo regulatório e de privacidade é alto (LGPD Artigo 11 — dados sensíveis), o custo técnico é não-trivial (stream de sensores em tempo real, gestão de consentimento) e o benefício preditivo é zero."
 
-### Show
+### Mostrar
 
-- `notebooks/04_emotional_features.ipynb` — side-by-side comparison table
-- SHAP summary plot showing emotional features at the bottom
-- `docs/model_card.md` — ethical analysis section
+- `notebooks/04_emotional_features.ipynb` — tabela de comparação lado a lado
+- Summary plot do SHAP mostrando features emocionais no fundo
+- `docs/model_card.md` — seção de análise ética
 
 ### 4b. Fairness (2 min)
 
-"I implemented disparate impact analysis using the 4/5ths rule: the approval rate for any subgroup must be at least 80% of the highest group's rate. I tested across age cohorts and income quartiles.
+"Implementei análise de impacto disparatado usando a regra dos 4/5: a taxa de aprovação de qualquer subgrupo precisa ser pelo menos 80% da taxa do grupo com maior aprovação. Testei em coortes de idade e quartis de renda.
 
-Age: all cohorts pass. Income: Q1 is borderline at ~82% of Q4's rate — something to monitor in production with real data. I also checked subgroup calibration: the model is well-calibrated across all cohorts.
+Idade: todos os coortes passam. Renda: Q1 está no limite com ~82% da taxa de Q4 — algo para monitorar em produção com dados reais. Também verifiquei a calibração por subgrupo: o modelo está bem calibrado em todos os coortes.
 
-This isn't just a checkbox — InfinitePay operates under BACEN regulation, and the LGPD requires demonstrable fairness for automated financial decisions."
+Isso não é apenas um checkbox — a InfinitePay opera sob regulação do BACEN, e a LGPD exige demonstração de fairness para decisões financeiras automatizadas."
 
-### Show
+### Mostrar
 
-- `notebooks/06_fairness_analysis.ipynb` — 4/5ths rule bar charts
-- Streamlit dashboard Fairness page
+- `notebooks/06_fairness_analysis.ipynb` — gráficos de barras da regra dos 4/5
+- Página de Fairness no dashboard Streamlit
 
 ---
 
-## 5. Backend Deep Dive (5 min)
+## 5. Backend em Detalhe (5 min)
 
-### 5a. API Design (2 min)
+### 5a. Design da API (2 min)
 
-"Seven endpoints, all protected by HTTP Basic Auth with constant-time comparison (`secrets.compare_digest`). Pydantic v2 for all input/output validation — the OpenAPI docs are auto-generated at `/docs`.
+"Sete endpoints, todos protegidos por HTTP Basic Auth com comparação em tempo constante (`secrets.compare_digest`). Pydantic v2 para toda validação de entrada/saída — os docs OpenAPI são gerados automaticamente em `/docs`.
 
-The credit evaluation endpoint does: predict → calibrate → map to credit product → generate SHAP → create offer → persist to DB → log audit events → respond. All synchronous, ~50ms per request with models pre-loaded at startup.
+O endpoint de avaliação de crédito faz: prever → calibrar → mapear para produto de crédito → gerar SHAP → criar oferta → persistir no banco → logar eventos de auditoria → responder. Tudo síncrono, ~50ms por requisição com modelos pré-carregados no startup.
 
-Async evaluation available via rq for batch workloads. Offer acceptance triggers a separate deployment job."
+Avaliação assíncrona disponível via rq para cargas batch. Aceitação da oferta dispara um job de deployment separado."
 
-### Show
+### Mostrar
 
 - `http://localhost:8000/docs` — Swagger UI
-- `src/api/schemas.py` — CreditRequest, CreditResponse models
+- `src/api/schemas.py` — modelos CreditRequest, CreditResponse
 
-### 5b. Database (1 min)
+### 5b. Banco de Dados (1 min)
 
-"Seven tables: users, transactions, emotional_events, credit_offers, notifications, credit_evaluations, credit_events. Foreign keys and indexes. The evaluation audit trail captures every lifecycle event with timestamps."
+"Sete tabelas: users, transactions, emotional_events, credit_offers, notifications, credit_evaluations, credit_events. Foreign keys e índices. A trilha de auditoria captura cada evento do ciclo de vida com timestamps."
 
-### Show
+### Mostrar
 
-- README Database Schema section with example SQL queries
+- Seção Database Schema no README com queries SQL de exemplo
 
-### 5c. Observability (1 min)
+### 5c. Observabilidade (1 min)
 
-"Structured JSON logging via python-json-logger. X-Request-ID middleware on every request with method, path, status_code, duration_ms. The log_level is configurable via environment variable."
+"Logging JSON estruturado via python-json-logger. Middleware X-Request-ID em toda requisição com method, path, status_code, duration_ms. O log_level é configurável via variável de ambiente."
 
 ### 5d. Docker (1 min)
 
-"Four services in docker-compose: API, rq worker, Redis, Streamlit dashboard. Healthcheck on API and Redis. Multi-stage Dockerfile."
+"Quatro serviços no docker-compose: API, rq worker, Redis, dashboard Streamlit. Healthcheck na API e no Redis. Dockerfile com imagem slim."
 
 ---
 
-## 6. Live Demo (3 min)
+## 6. Demo ao Vivo (3 min)
 
-### Steps
+### Passos
 
-1. **Start**: `docker compose up --build` (or show already running)
+1. **Iniciar**: `docker compose up --build` (ou mostrar já rodando)
 2. **Health check**: `curl http://localhost:8000/health`
-3. **Credit evaluation**:
+3. **Avaliação de crédito**:
 ```bash
 curl -X POST http://localhost:8000/credit/evaluate \
   -u admin:changeme \
   -H "Content-Type: application/json" \
   -d '{"revolving_utilization":0.3,"age":45,"debt_ratio":0.2,"monthly_income":5000,"open_credit_lines":4,"past_due_30_59":0,"past_due_60_89":0,"past_due_90":0,"real_estate_loans":1,"dependents":2,"had_past_due_sentinel":0}'
 ```
-4. **Show response**: point out decision, score, credit_limit, interest_rate, offer_id, shap_explanation, top_factors
-5. **Accept offer**: `curl -X POST http://localhost:8000/credit/offers/{offer_id}/accept -u admin:changeme`
-6. **Emotion stream**: `curl -X POST http://localhost:8000/emotions/stream -u admin:changeme -H "Content-Type: application/json" -d '{"stress_level":0.7,"impulsivity_score":0.4}'`
-7. **Dashboard**: open `http://localhost:8501` — show Score Distribution and SHAP Explorer pages
+4. **Mostrar resposta**: destacar decision, score, credit_limit, interest_rate, offer_id, shap_explanation, top_factors
+5. **Aceitar oferta**: `curl -X POST http://localhost:8000/credit/offers/{offer_id}/accept -u admin:changeme`
+6. **Stream emocional**: `curl -X POST http://localhost:8000/emotions/stream -u admin:changeme -H "Content-Type: application/json" -d '{"stress_level":0.7,"impulsivity_score":0.4}'`
+7. **Dashboard**: abrir `http://localhost:8501` — mostrar páginas de Score Distribution e SHAP Explorer
 
 ---
 
-## 7. Design Decisions (2 min)
+## 7. Decisões de Design (2 min)
 
-### What to say
+### O que falar
 
-"Three key trade-offs:
+"Três trade-offs principais:
 
-1. **SQLite over Postgres**: The challenge says 'database of your choice'. SQLite gives us ACID transactions with zero ops. In production: Postgres with read replicas and row-level security.
+1. **SQLite ao invés de Postgres**: O desafio diz 'banco de dados à sua escolha'. SQLite nos dá transações ACID com zero ops. Em produção: Postgres com read replicas e row-level security.
 
-2. **rq over Celery**: Single config variable (REDIS_URL) vs Celery's 4+ with silent failure modes. Same semantics, dramatically lower integration risk. In production at scale: Kafka for event sourcing.
+2. **rq ao invés de Celery**: Uma variável de configuração (REDIS_URL) vs 4+ do Celery com modos de falha silenciosa. Mesma semântica, risco de integração dramaticamente menor. Em produção em escala: Kafka para event sourcing.
 
-3. **Redis Pub/Sub over Kafka for emotion stream**: Kafka provides durability and replay that Pub/Sub doesn't. But adding a fourth infrastructure component to a case study adds risk without demonstrating anything new architecturally. The code is identical — swap one function in worker.py.
+3. **Redis Pub/Sub ao invés de Kafka para stream emocional**: Kafka provê durabilidade e replay que Pub/Sub não tem. Mas adicionar um quarto componente de infraestrutura a um case study adiciona risco sem demonstrar nada novo arquiteturalmente. O código é idêntico — troca uma função no worker.py.
 
-The meta-decision: I optimized for **reliability of delivery** over **impressiveness of stack**. Every component works end-to-end. Nothing is half-implemented."
-
----
-
-## Closing
-
-"This system scores 150,000 borrowers with AUC 0.87, explains every decision with SHAP, experimentally proves emotional features don't help, implements regulatory fairness checks, and runs in Docker with a single command. Questions?"
+A meta-decisão: eu otimizei para **confiabilidade de entrega** ao invés de **impressionar pelo stack**. Cada componente funciona end-to-end. Nada está meio implementado."
 
 ---
 
-## Timing Summary
+## Fechamento
 
-| Section | Duration | Cumulative |
-|---------|----------|------------|
-| Opening | 2 min | 2 min |
-| Architecture | 5 min | 7 min |
-| ML Pipeline | 8 min | 15 min |
-| Ethical Analysis | 5 min | 20 min |
+"Esse sistema avalia 150.000 tomadores de crédito com AUC 0.87, explica cada decisão com SHAP, prova experimentalmente que features emocionais não ajudam, implementa checks regulatórios de fairness e roda em Docker com um único comando. Perguntas?"
+
+---
+
+## Resumo de Timing
+
+| Seção | Duração | Acumulado |
+|-------|---------|-----------|
+| Abertura | 2 min | 2 min |
+| Arquitetura | 5 min | 7 min |
+| Pipeline de ML | 8 min | 15 min |
+| Análise Ética | 5 min | 20 min |
 | Backend | 5 min | 25 min |
-| Live Demo | 3 min | 28 min |
-| Design Decisions | 2 min | 30 min |
+| Demo ao Vivo | 3 min | 28 min |
+| Decisões de Design | 2 min | 30 min |
