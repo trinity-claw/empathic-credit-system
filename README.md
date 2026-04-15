@@ -1,6 +1,6 @@
 # Empathic Credit System
 
-ML-based credit scoring with SHAP explainability. Trained on [Give Me Some Credit](https://www.kaggle.com/c/GiveMeSomeCredit) (150k borrowers), served via FastAPI with async job support.
+ML-based credit scoring with SHAP explainability. Trained on [Give Me Some Credit](https://www.kaggle.com/c/GiveMeSomeCredit) (150k borrowers), served via FastAPI with real-time emotion ingestion, async job support, and full audit trail.
 
 ## Results
 
@@ -12,38 +12,124 @@ ML-based credit scoring with SHAP explainability. Trained on [Give Me Some Credi
 
 Emotional features provide no meaningful lift (+0% AUC). See [`docs/model_card.md`](docs/model_card.md) for the full ethical analysis.
 
+---
+
 ## Architecture
 
+The system starts at the customer's brain and ends at a credit decision with a traceable audit trail.
+
 ```
-┌─────────────────────────────────────────────────────────────┐
-│                        Client                               │
-└───────────────────────┬─────────────────────────────────────┘
-                        │ HTTP Basic Auth
-         ┌──────────────▼──────────────┐
-         │        FastAPI (api)         │
-         │  POST /credit/evaluate       │  ← synchronous
-         │  POST /credit/evaluate/async │  ← enqueues rq job
-         │  GET  /credit/evaluate/{id}  │  ← poll result
-         │  GET  /health                │
-         └──────┬──────────┬────────────┘
-                │          │
-         ┌──────▼──┐  ┌────▼──────┐
-         │ SQLite  │  │   Redis   │
-         │  (DB)   │  │  (queue)  │
-         └─────────┘  └────┬──────┘
-                           │
-                    ┌──────▼──────┐
-                    │  rq worker  │
-                    │  (scoring)  │
-                    └─────────────┘
+┌──────────────────────────────────────────────────────────────────────────────┐
+│  Customer Brain / Mobile App (InfinitePay)                                   │
+│  Emotion sensor captures: stress, impulsivity, stability, stress_events      │
+└──────────────┬──────────────────────────────┬───────────────────────────────┘
+               │ Emotion Stream               │ Credit Evaluation Request
+               │ POST /emotions/stream        │ POST /credit/evaluate
+               ▼                              ▼
+┌──────────────────────────────────────────────────────────────────────────────┐
+│                      FastAPI (api service)                                   │
+│                                                                              │
+│  X-Request-ID middleware (correlation header on every request)               │
+│  HTTP Basic Auth on protected endpoints                                      │
+│                                                                              │
+│  POST /emotions/stream          → persist event + publish to Redis Pub/Sub   │
+│  POST /credit/evaluate          → sync: XGBoost + SHAP → decision + limit   │
+│  POST /credit/evaluate/async    → enqueue rq job → return job_id             │
+│  GET  /credit/evaluate/{job_id} → poll async result                          │
+│  POST /credit/offers/{id}/accept → enqueue deployment job                   │
+│  GET  /health                   → healthcheck (no auth)                      │
+└──────┬───────────────────────────────┬──────────────────────────────────────┘
+       │                               │
+       ▼                               ▼
+┌──────────────┐              ┌────────────────────┐
+│   SQLite     │              │   Redis             │
+│              │              │                     │
+│  users       │              │  Queue: credit_eval  │  ← scoring jobs
+│  transactions│              │  Queue: credit_eval  │  ← deployment jobs
+│  emotional   │              │  Pub/Sub: emotion    │  ← stream consumers
+│   _events    │              │   _stream            │
+│  credit_     │              └──────────┬───────────┘
+│   offers     │                         │
+│  notifications│                        │
+│  credit_     │              ┌──────────▼───────────┐
+│   evaluations│              │   rq worker           │
+│  credit_     │              │                       │
+│   events     │◄─────────────│  _run_evaluation:     │
+└──────────────┘              │    XGBoost → SHAP     │
+                              │    → credit product   │
+                              │                       │
+                              │  _deploy_credit_offer:│
+                              │    accept offer        │
+                              │    update user profile │
+                              │    save notification   │
+                              └───────────────────────┘
 ```
 
-**Model pipeline per request**:
-1. HTTP Basic auth
-2. XGBoost prediction (loaded at startup, not per-request)
-3. IsotonicRegression calibration → true probability
-4. SHAP TreeExplainer → per-feature contributions
-5. Persist to SQLite, return `CreditResponse`
+**ML pipeline per credit evaluation request**:
+1. HTTP Basic auth + X-Request-ID correlation
+2. XGBoost prediction (loaded at startup, not per-request — ~1ms latency)
+3. IsotonicRegression calibration → true probability of default
+4. Score mapping: `score = (1 - P(default)) × 1000`
+5. Credit product assignment: limit + interest rate + type (based on score tier)
+6. SHAP TreeExplainer → per-feature contributions (exact, O(TLD))
+7. Persist to SQLite (`credit_evaluations` + `credit_events` audit trail)
+8. If approved: create `credit_offer` record, return `offer_id` in response
+
+**Emotion stream pipeline**:
+1. Mobile app posts emotional sensor reading to `POST /emotions/stream`
+2. Event persisted to `emotional_events` table
+3. Published to Redis Pub/Sub `ecs:emotion_stream` channel
+4. Downstream consumers (analytics, risk aggregators) subscribe independently
+
+**Credit deployment pipeline** (event-driven, decoupled from scoring):
+1. User calls `POST /credit/offers/{id}/accept`
+2. rq job enqueued: `_deploy_credit_offer`
+3. Worker marks offer as accepted, saves `Notification` record
+4. Reflects CloudWalk's event-driven micro-service architecture
+
+---
+
+## Database Schema
+
+Seven tables with foreign keys and indexes:
+
+```sql
+users              (id PK, external_id IDX, current_credit_limit, credit_type, last_score)
+transactions       (id PK, user_id FK→users IDX, amount, transaction_type, status)
+emotional_events   (id PK, user_id FK→users IDX, stress_level, impulsivity_score, ...)
+credit_offers      (id PK, user_id FK→users IDX, evaluation_id FK→credit_evaluations, ...)
+notifications      (id PK, user_id FK→users IDX, offer_id, notification_type, status)
+credit_evaluations (id PK, decision, probability_of_default, score, shap_explanation JSON)
+credit_events      (id PK, request_id IDX, event_type, detail JSON)  -- audit trail
+```
+
+### Example SQL Queries
+
+**1. All emotional events for a user in the last 7 days:**
+```sql
+SELECT id, captured_at, stress_level, impulsivity_score, emotional_stability
+FROM emotional_events
+WHERE user_id = '550e8400-e29b-41d4-a716-446655440000'
+  AND captured_at >= datetime('now', '-7 days')
+ORDER BY captured_at DESC;
+```
+
+**2. High-risk customers based on credit score threshold:**
+```sql
+SELECT u.id, u.external_id, u.current_credit_limit, u.last_score,
+       ce.probability_of_default, ce.decision, ce.created_at
+FROM users u
+JOIN credit_evaluations ce ON ce.id = (
+    SELECT id FROM credit_evaluations
+    WHERE json_extract(request_payload, '$.user_id') = u.id
+    ORDER BY created_at DESC LIMIT 1
+)
+WHERE u.last_score < 400
+ORDER BY u.last_score ASC
+LIMIT 100;
+```
+
+---
 
 ## Quickstart
 
@@ -76,11 +162,14 @@ uv run uvicorn src.api.main:app --reload
 docker compose up --build
 ```
 
-API available at `http://localhost:8000`. Default credentials: `admin` / `changeme`.
+API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
+Default credentials: `admin` / `changeme`.
+
+---
 
 ## API Usage
 
-### Synchronous evaluation
+### Synchronous credit evaluation
 
 ```bash
 curl -X POST http://localhost:8000/credit/evaluate \
@@ -109,6 +198,10 @@ curl -X POST http://localhost:8000/credit/evaluate \
   "decision": "APPROVED",
   "probability_of_default": 0.026,
   "score": 973,
+  "credit_limit": 50000.0,
+  "interest_rate": 0.015,
+  "credit_type": "long_term",
+  "offer_id": "f1e2d3c4-...",
   "model_used": "xgboost_financial_calibrated",
   "shap_explanation": { ... },
   "top_factors": [
@@ -116,6 +209,30 @@ curl -X POST http://localhost:8000/credit/evaluate \
     ...
   ]
 }
+```
+
+### Accept credit offer (async deployment)
+
+```bash
+curl -X POST http://localhost:8000/credit/offers/{offer_id}/accept \
+  -u admin:changeme
+# → {"offer_id": "...", "job_id": "...", "status": "queued"}
+```
+
+### Real-time emotion stream
+
+```bash
+curl -X POST http://localhost:8000/emotions/stream \
+  -u admin:changeme \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "stress_level": 0.72,
+    "impulsivity_score": 0.45,
+    "emotional_stability": 0.38,
+    "financial_stress_events_7d": 3
+  }'
+# → {"event_id": "...", "status": "received"}
 ```
 
 ### Async evaluation
@@ -130,54 +247,108 @@ curl -X POST http://localhost:8000/credit/evaluate/async \
 curl http://localhost:8000/credit/evaluate/abc123 -u admin:changeme
 ```
 
+---
+
 ## Project Structure
 
 ```
 src/
   data/
-    load.py          # Data loading, column mapping, missing/sentinel treatment
-    split.py         # Stratified 70/15/15 train/val/test split
-    emotional.py     # Synthetic emotional feature injection
+    load.py            # Data loading, column mapping, missing/sentinel treatment
+    split.py           # Stratified 70/15/15 train/val/test split
+    emotional.py       # Synthetic emotional feature injection
   evaluation/
-    metrics.py       # AUC, KS, Brier, precision@base_rate, plots
+    metrics.py         # AUC, KS, Brier, precision@base_rate, plots
   explainability/
     shap_explainer.py  # CreditExplainer wrapping shap.TreeExplainer
   api/
-    main.py          # FastAPI app (lifespan, routes)
-    schemas.py       # Pydantic CreditRequest / CreditResponse
-    auth.py          # HTTP Basic authentication
-    db.py            # SQLAlchemy + SQLite
-    model_store.py   # Singleton model/explainer loaded at startup
-    worker.py        # rq queue integration
-    settings.py      # Pydantic Settings from .env
+    main.py            # FastAPI app (lifespan, middleware, routes)
+    schemas.py         # Pydantic models: CreditRequest, CreditResponse, EmotionStreamRequest
+    auth.py            # HTTP Basic authentication
+    db.py              # SQLAlchemy + SQLite (7 tables)
+    model_store.py     # Singleton model/explainer + credit product mapping
+    worker.py          # rq jobs: scoring, deployment; Redis Pub/Sub publisher
+    settings.py        # Pydantic Settings from .env
 notebooks/
-  01_eda.ipynb                 # Exploratory data analysis
-  02_baseline_logreg.ipynb     # Logistic regression baseline
-  03_xgboost.ipynb             # XGBoost financial model + calibration
-  04_emotional_features.ipynb  # Emotional features experiment
-  05_shap_analysis.ipynb       # SHAP + ethical conclusion
+  01_eda.ipynb                  # Exploratory data analysis
+  02_baseline_logreg.ipynb      # Logistic regression baseline
+  03_xgboost.ipynb              # XGBoost financial model + calibration + test set eval
+  04_emotional_features.ipynb   # Emotional features experiment
+  05_shap_analysis.ipynb        # SHAP + ethical conclusion
+  06_fairness_analysis.ipynb    # Disparate impact analysis (4/5ths rule, LGPD)
 docs/
-  model_card.md      # Full model card with fairness and ethics analysis
+  model_card.md        # Full model card with fairness and ethics analysis
 tests/
-  test_metrics.py    # Unit tests for evaluation metrics
-  test_emotional.py  # Unit tests for emotional feature injection
-  test_api.py        # Integration tests for FastAPI endpoints
+  test_metrics.py      # Evaluation metrics (KS, precision, AUC)
+  test_emotional.py    # Emotional feature injection + R² non-circularity
+  test_api.py          # API integration: all endpoints + auth + middleware
+  test_db.py           # Database: all tables, save/accept/notify flows
+  test_model_store.py  # predict() + credit product mapping
+  test_shap_explainer.py  # CreditExplainer + ExplanationResult
+  test_load.py         # Data loading + sentinel handling
+  test_split.py        # Stratified splits
 ```
+
+---
 
 ## Development
 
 ```bash
-# Run tests
-uv run pytest
-
-# Lint + format
-uv run ruff check && uv run ruff format
+make test    # uv run pytest
+make lint    # uv run ruff check + format check
+make format  # uv run ruff check --fix + format
+make serve   # uv run uvicorn src.api.main:app --reload
+make docker  # docker compose up --build
 ```
+
+---
+
+## Data Privacy and Security
+
+### Sensitive Data Classification
+
+Emotional data (stress, impulsivity, stability) is **highly sensitive** — it can serve as a proxy for mental health status, disability, or protected characteristics. LGPD classifies it as **dados sensíveis** under Article 11, requiring explicit consent and the highest protection tier.
+
+### Encryption
+
+| Layer | Approach |
+|---|---|
+| In transit | TLS 1.3 (enforced at load balancer / API gateway in production) |
+| At rest (SQLite) | Disk-level encryption (LUKS on Linux) or SQLCipher; in production: Postgres with Transparent Data Encryption |
+| Redis | TLS-enabled Redis 7+ with AUTH; in production: Redis Enterprise with at-rest encryption |
+
+### Pseudonymisation
+
+- `users.external_id` stores a **SHA-256 hash** of the InfinitePay user ID — never the raw ID
+- `emotional_events.user_id` is a UUID that maps to the pseudonymised profile, not to PII
+- Raw PII (name, CPF, address) is never stored in the ECS database — it remains in the source system of record
+- SHAP explanations reference feature names (`revolving_utilization`, `age`) — not individual identities
+
+### LGPD Compliance
+
+| Requirement | Implementation |
+|---|---|
+| **Right to explanation** | Every decision includes SHAP values per feature — legally defensible explanation of automated decisions |
+| **Data minimization** | Only features required for scoring are stored; raw sensor data is optional |
+| **Consent** | Emotional features are opt-in; financial-only model is deployed by default |
+| **Audit trail** | `credit_events` table logs every lifecycle event with timestamps |
+| **Retention** | Recommended policy: emotional events purged after 90 days; evaluations retained for 5 years per BACEN |
+| **Right to erasure** | Pseudonymised records can be unlinked by deleting the external_id mapping |
+
+### Trade-offs and Assumptions
+
+- This case study uses HTTP Basic Auth with env-variable credentials. Production would use OAuth 2.0 / JWT with short-lived tokens.
+- The emotional model is **not deployed** — zero emotional data influences production credit decisions. This was a deliberate ethical choice backed by the experiment showing -0.0008 AUC delta.
+- SQLite is used for case study simplicity. Production at InfinitePay scale would use Postgres with row-level security policies.
+
+---
 
 ## Design Decisions
 
 **SQLite over Postgres**: The case permits "database of your choice". SQLite provides ACID transactions with zero ops overhead — appropriate for a case study. In production at InfinitePay scale: Postgres with read replicas.
 
 **rq over Celery**: Single-variable config (`REDIS_URL`) vs Celery's 4+ variables with silent failure modes. Same queue semantics, far lower integration risk. In production: Pub/Sub or Kafka depending on volume.
+
+**Redis Pub/Sub over Kafka for emotion stream**: Kafka provides durability, replay, and consumer group semantics that Kafka needs for production. Redis Pub/Sub was chosen for this case study to avoid adding a fourth infrastructure component. The design is identical — swap the publisher in `worker.py:publish_emotional_event`.
 
 **Financial-only model for production**: Emotional features showed -0.0008 AUC delta (slightly worse). The regulatory and privacy costs outweigh any marginal benefit. See [`docs/model_card.md`](docs/model_card.md).

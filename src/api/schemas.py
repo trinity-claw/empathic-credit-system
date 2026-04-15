@@ -109,6 +109,16 @@ class CreditResponse(BaseModel):
     decision: str  # "APPROVED" | "DENIED"
     probability_of_default: float = Field(..., ge=0, le=1)
     score: int = Field(..., ge=0, le=1000, description="Score (1000 = lowest risk)")
+    credit_limit: float = Field(
+        ..., ge=0, description="Approved credit limit in BRL (0 if denied)"
+    )
+    interest_rate: float | None = Field(
+        None, ge=0, description="Monthly interest rate (None if denied)"
+    )
+    credit_type: str | None = Field(None, description="short_term | long_term | denied")
+    offer_id: str | None = Field(
+        None, description="Offer ID — send to /credit/offers/{id}/accept"
+    )
     model_used: str
     shap_explanation: dict[str, Any]
     top_factors: list[ShapFactor]
@@ -121,6 +131,10 @@ class CreditResponse(BaseModel):
                     "decision": "APPROVED",
                     "probability_of_default": 0.042,
                     "score": 958,
+                    "credit_limit": 50000.0,
+                    "interest_rate": 0.015,
+                    "credit_type": "long_term",
+                    "offer_id": "f1e2d3c4-b5a6-7890-abcd-123456789abc",
                     "model_used": "xgboost_financial_calibrated",
                     "shap_explanation": {
                         "base_value": -2.63,
@@ -150,3 +164,47 @@ class HealthResponse(BaseModel):
     status: str = "ok"
     model_loaded: bool
     model_version: str
+
+
+class EmotionStreamRequest(BaseModel):
+    """Flexible emotional event payload from the mobile app sensor.
+
+    The challenge states the message structure is not predefined — fields are
+    optional to support partial reads from different sensor modalities.
+    """
+
+    user_id: str | None = Field(None, description="Pseudonymised user UUID")
+    stress_level: float | None = Field(None, ge=0, le=1)
+    impulsivity_score: float | None = Field(None, ge=0, le=1)
+    emotional_stability: float | None = Field(None, ge=0, le=1)
+    financial_stress_events_7d: int | None = Field(None, ge=0, le=20)
+    captured_at: str | None = Field(None, description="ISO 8601 timestamp from device")
+    raw_sensor_data: dict | None = Field(
+        None, description="Vendor-specific raw sensor payload"
+    )
+
+    model_config = {
+        "json_schema_extra": {
+            "examples": [
+                {
+                    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+                    "stress_level": 0.72,
+                    "impulsivity_score": 0.45,
+                    "emotional_stability": 0.38,
+                    "financial_stress_events_7d": 3,
+                    "captured_at": "2026-04-15T10:30:00Z",
+                }
+            ]
+        }
+    }
+
+
+class EmotionStreamResponse(BaseModel):
+    event_id: str
+    status: str = "received"
+
+
+class OfferAcceptResponse(BaseModel):
+    offer_id: str
+    job_id: str
+    status: str = "queued"

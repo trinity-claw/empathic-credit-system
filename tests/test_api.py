@@ -10,6 +10,9 @@ _MOCK_RESULT = {
     "decision": "APPROVED",
     "probability_of_default": 0.05,
     "score": 950,
+    "credit_limit": 50000.0,
+    "interest_rate": 0.015,
+    "credit_type": "long_term",
     "model_used": "xgboost_financial_calibrated",
     "shap_explanation": {
         "base_value": 0.01,
@@ -39,7 +42,10 @@ def client():
         patch("src.api.model_store.predict", return_value=_MOCK_RESULT),
         patch("src.api.db.init_db"),
         patch("src.api.db.save_evaluation"),
+        patch("src.api.db.save_credit_offer"),
+        patch("src.api.db.save_emotional_event"),
         patch("src.api.db.log_event"),
+        patch("src.api.worker.publish_emotional_event"),
     ):
         from src.api.main import app
 
@@ -63,6 +69,10 @@ class TestHealth:
     def test_health_returns_version(self, client):
         resp = client.get("/health")
         assert "model_version" in resp.json()
+
+    def test_health_returns_x_request_id(self, client):
+        resp = client.get("/health")
+        assert "x-request-id" in resp.headers
 
 
 class TestAuth:
@@ -109,8 +119,21 @@ class TestEvaluate:
         assert "decision" in body
         assert "probability_of_default" in body
         assert "score" in body
+        assert "credit_limit" in body
+        assert "interest_rate" in body
+        assert "credit_type" in body
         assert "shap_explanation" in body
         assert "top_factors" in body
+
+    def test_response_has_offer_id_when_approved(self, client):
+        resp = client.post(
+            "/credit/evaluate",
+            json=self._VALID_PAYLOAD,
+            headers=_auth_header(),
+        )
+        body = resp.json()
+        assert body["decision"] == "APPROVED"
+        assert body["offer_id"] is not None
 
     def test_decision_is_valid_value(self, client):
         resp = client.post(
@@ -186,3 +209,54 @@ class TestAsyncEvaluate:
         assert resp.status_code == 200
         body = resp.json()
         assert body["status"] == "not_found"
+
+
+class TestOfferAcceptance:
+    def test_accept_offer_queues_job(self, client):
+        with patch("src.api.main.enqueue_deployment", return_value="deploy-job-1"):
+            resp = client.post(
+                "/credit/offers/offer-abc-123/accept",
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["offer_id"] == "offer-abc-123"
+        assert body["job_id"] == "deploy-job-1"
+        assert body["status"] == "queued"
+
+    def test_accept_offer_requires_auth(self, client):
+        resp = client.post("/credit/offers/some-id/accept")
+        assert resp.status_code == 401
+
+
+class TestEmotionStream:
+    _VALID_EVENT = {
+        "user_id": "550e8400-e29b-41d4-a716-446655440000",
+        "stress_level": 0.7,
+        "impulsivity_score": 0.4,
+        "emotional_stability": 0.5,
+        "financial_stress_events_7d": 2,
+    }
+
+    def test_stream_event_returns_200(self, client):
+        resp = client.post(
+            "/emotions/stream",
+            json=self._VALID_EVENT,
+            headers=_auth_header(),
+        )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "received"
+        assert "event_id" in body
+
+    def test_stream_event_requires_auth(self, client):
+        resp = client.post("/emotions/stream", json=self._VALID_EVENT)
+        assert resp.status_code == 401
+
+    def test_stream_event_accepts_partial_payload(self, client):
+        resp = client.post(
+            "/emotions/stream",
+            json={"stress_level": 0.5},
+            headers=_auth_header(),
+        )
+        assert resp.status_code == 200

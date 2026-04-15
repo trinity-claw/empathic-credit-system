@@ -9,6 +9,7 @@ from src.api.model_store import (
     DEFAULT_THRESHOLD,
     FINANCIAL_FEATURES,
     SCORE_MAX,
+    _compute_credit_product,
     predict,
 )
 
@@ -65,6 +66,9 @@ class TestPredict:
         assert "decision" in result
         assert "probability_of_default" in result
         assert "score" in result
+        assert "credit_limit" in result
+        assert "interest_rate" in result
+        assert "credit_type" in result
         assert "model_used" in result
         assert "shap_explanation" in result
         assert "top_factors" in result
@@ -103,3 +107,31 @@ class TestPredict:
         _setup_store()
         result = predict(_make_request_data(), use_emotional=False)
         assert "financial" in result["model_used"]
+
+
+class TestCreditProduct:
+    def test_denied_has_zero_limit(self):
+        product = _compute_credit_product(score=400, decision="DENIED")
+        assert product["credit_limit"] == 0.0
+        assert product["interest_rate"] is None
+        assert product["credit_type"] == "denied"
+
+    def test_high_score_long_term(self):
+        product = _compute_credit_product(score=900, decision="APPROVED")
+        assert product["credit_type"] == "long_term"
+        assert product["credit_limit"] > 0
+        assert product["interest_rate"] is not None
+
+    def test_low_score_short_term(self):
+        product = _compute_credit_product(score=300, decision="APPROVED")
+        assert product["credit_type"] == "short_term"
+
+    def test_interest_rate_decreases_with_score(self):
+        high = _compute_credit_product(score=900, decision="APPROVED")
+        low = _compute_credit_product(score=300, decision="APPROVED")
+        assert high["interest_rate"] < low["interest_rate"]
+
+    def test_credit_limit_increases_with_score(self):
+        high = _compute_credit_product(score=900, decision="APPROVED")
+        low = _compute_credit_product(score=300, decision="APPROVED")
+        assert high["credit_limit"] > low["credit_limit"]

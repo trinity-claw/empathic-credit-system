@@ -15,6 +15,14 @@ logger = logging.getLogger(__name__)
 DEFAULT_THRESHOLD = 0.15
 SCORE_MAX = 1000
 
+# Score tiers for credit product mapping (BRL amounts, monthly rates)
+_CREDIT_TIERS = [
+    (850, 50_000.0, 0.015, "long_term"),
+    (700, 20_000.0, 0.025, "long_term"),
+    (550, 8_000.0, 0.040, "short_term"),
+    (0, 2_000.0, 0.060, "short_term"),
+]
+
 FINANCIAL_FEATURES = [
     "revolving_utilization",
     "age",
@@ -81,6 +89,7 @@ def predict(request_data: dict, use_emotional: bool = False) -> dict:
     decision = "DENIED" if cal_proba >= DEFAULT_THRESHOLD else "APPROVED"
 
     explanation = explainer.explain_one(X).to_dict()
+    credit_product = _compute_credit_product(score, decision)
 
     return {
         "decision": decision,
@@ -89,7 +98,22 @@ def predict(request_data: dict, use_emotional: bool = False) -> dict:
         "model_used": model_name,
         "shap_explanation": explanation,
         "top_factors": explanation["top_factors"],
+        **credit_product,
     }
+
+
+def _compute_credit_product(score: int, decision: str) -> dict:
+    """Map ML score to credit product terms (limit, rate, type)."""
+    if decision == "DENIED":
+        return {"credit_limit": 0.0, "interest_rate": None, "credit_type": "denied"}
+    for min_score, limit, rate, credit_type in _CREDIT_TIERS:
+        if score >= min_score:
+            return {
+                "credit_limit": limit,
+                "interest_rate": rate,
+                "credit_type": credit_type,
+            }
+    return {"credit_limit": 0.0, "interest_rate": None, "credit_type": "denied"}
 
 
 def is_loaded() -> bool:
