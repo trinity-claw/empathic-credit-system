@@ -21,6 +21,9 @@ models/*.json
 .ipynb_checkpoints/
 */.ipynb_checkpoints/*
 
+# Git worktrees
+.worktrees/
+
 # IDE / OS
 .vscode/
 .idea/
