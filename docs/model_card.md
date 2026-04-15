@@ -107,20 +107,28 @@ Noise scale was set so R² < 0.30 for all features, ensuring they are correlated
 
 ---
 
-## Fairness Analysis
+## Fairness & Disparate Impact Analysis
 
-Default rates were analyzed by age cohort and income bucket on the validation set:
+Full analysis in `notebooks/06_fairness_analysis.ipynb`. The 4/5ths rule was applied at the recommended threshold (P(default) >= 0.15 → DENIED).
 
-| Age group | Default rate | Model default rate (mean score) |
-|---|---|---|
-| 18-25 | ~11% | Higher risk scores (expected) |
-| 25-45 | ~7% | Near base rate |
-| 45-65 | ~5% | Lower risk scores (expected) |
-| 65+ | ~4% | Lowest risk scores |
+### Age Cohorts
 
-The model reflects real-world risk differences by age. However, **decisions should be reviewed for disparate impact** if the approval rate for any protected group falls more than 80% below the majority group rate (4/5ths rule). This analysis requires real production data.
+Approval rates and actual default rates were computed for six age brackets (18-29, 30-39, 40-49, 50-59, 60-69, 70+). Younger borrowers (18-29) have the lowest approval rate due to genuinely higher default rates. The 4/5ths ratio (lowest/highest approval rate) should be checked per deployment — if it falls below 0.80, remediation strategies (e.g., subgroup-specific calibration) should be considered.
 
-**Drift monitoring**: Monitor monthly income distribution, revolving utilization quartiles, and default rate on approved loans monthly. Model retraining should be triggered if AUC on a held-out sample drops below 0.82.
+### Income Cohorts
+
+Five income brackets plus an "Unknown" group (missing income). Lower-income borrowers have lower approval rates. Since `monthly_income` is a direct feature, income-based disparities are expected and reflect legitimate risk differences, but should be monitored.
+
+### Subgroup Calibration
+
+Scatter plots of predicted vs. actual default rates per cohort show whether the model over- or under-estimates risk for specific groups. Points close to the diagonal indicate fair calibration; systematic bias above/below signals potential unfairness.
+
+### Recommendations
+
+1. Monitor approval rates by demographic groups monthly
+2. Implement subgroup-specific calibration if 4/5ths threshold is violated
+3. Log and audit all decisions with SHAP explanations (already implemented)
+4. Retrain if AUC on a held-out sample drops below 0.82
 
 ---
 
