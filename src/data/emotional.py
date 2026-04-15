@@ -67,11 +67,11 @@ def inject_emotional_features(
     df = df.copy()
     n = len(df)
 
-    z_util   = _zscore(df["revolving_utilization"]).values
-    z_pd30   = _zscore(df["past_due_30_59"]).values
-    z_pd90   = _zscore(df["past_due_90"]).values
+    z_util = _zscore(df["revolving_utilization"]).values
+    z_pd30 = _zscore(df["past_due_30_59"]).values
+    z_pd90 = _zscore(df["past_due_90"]).values
     z_credit = _zscore(df["open_credit_lines"]).values
-    z_debt   = _zscore(df["debt_ratio"]).values
+    z_debt = _zscore(df["debt_ratio"]).values
 
     # stress_level: signal from utilization + recent delinquency + heavy noise
     stress_logit = 0.4 * z_util + 0.3 * z_pd30 + rng.normal(0, _NOISE_SCALE, n)
@@ -82,7 +82,9 @@ def inject_emotional_features(
     df["impulsivity_score"] = _sigmoid(impuls_logit).astype("float32")
 
     # emotional_stability: inverse composite of stress + impulsivity + noise
-    stab_logit = -(0.2 * stress_logit + 0.2 * impuls_logit) + rng.normal(0, _NOISE_SCALE, n)
+    stab_logit = -(0.2 * stress_logit + 0.2 * impuls_logit) + rng.normal(
+        0, _NOISE_SCALE, n
+    )
     df["emotional_stability"] = _sigmoid(stab_logit).astype("float32")
 
     # financial_stress_events_7d: Poisson count driven by delinquency + noise

@@ -13,7 +13,7 @@ Usage
 """
 
 import logging
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 import numpy as np
@@ -34,8 +34,7 @@ class ExplanationResult:
 
     def to_dict(self) -> dict[str, Any]:
         contributions = {
-            f: round(float(v), 6)
-            for f, v in zip(self.feature_names, self.shap_values)
+            f: round(float(v), 6) for f, v in zip(self.feature_names, self.shap_values)
         }
         top = sorted(contributions.items(), key=lambda x: abs(x[1]), reverse=True)
         return {
@@ -43,7 +42,11 @@ class ExplanationResult:
             "prediction": round(self.prediction, 6),
             "contributions": contributions,
             "top_factors": [
-                {"feature": k, "contribution": v, "direction": "increases_risk" if v > 0 else "decreases_risk"}
+                {
+                    "feature": k,
+                    "contribution": v,
+                    "direction": "increases_risk" if v > 0 else "decreases_risk",
+                }
                 for k, v in top[:5]
             ],
         }
@@ -87,12 +90,14 @@ class CreditExplainer:
 
         results = []
         for i in range(len(X_arr)):
-            results.append(ExplanationResult(
-                feature_names=self.feature_names,
-                shap_values=shap_vals[i].tolist(),
-                base_value=base_val,
-                prediction=float(row_sums[i]),
-            ))
+            results.append(
+                ExplanationResult(
+                    feature_names=self.feature_names,
+                    shap_values=shap_vals[i].tolist(),
+                    base_value=base_val,
+                    prediction=float(row_sums[i]),
+                )
+            )
         return results
 
     def explain_one(self, X: pd.DataFrame | np.ndarray) -> ExplanationResult:
