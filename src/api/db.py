@@ -10,6 +10,7 @@ from sqlalchemy import (
     Integer,
     String,
     create_engine,
+    func,
 )
 from sqlalchemy.orm import DeclarativeBase, Mapped, Session, mapped_column
 
@@ -232,6 +233,98 @@ def accept_credit_offer(offer_id: str) -> CreditOffer | None:
         session.commit()
         session.refresh(offer)
         return offer
+
+
+def list_evaluations(*, limit: int = 20, offset: int = 0) -> tuple[list[dict], int]:
+    with get_session() as session:
+        total = session.query(func.count(CreditEvaluation.id)).scalar() or 0
+        rows = (
+            session.query(CreditEvaluation)
+            .order_by(CreditEvaluation.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        items = [
+            {
+                "id": row.id,
+                "decision": row.decision,
+                "score": row.score,
+                "probability_of_default": row.probability_of_default,
+                "model_used": row.model_used,
+                "created_at": row.created_at.isoformat(),
+                "request_payload": row.request_payload,
+                "shap_explanation": row.shap_explanation,
+            }
+            for row in rows
+        ]
+        return items, total
+
+
+def get_evaluation_stats() -> dict:
+    with get_session() as session:
+        total = session.query(func.count(CreditEvaluation.id)).scalar() or 0
+        approved = (
+            session.query(func.count(CreditEvaluation.id))
+            .filter(CreditEvaluation.decision == "APPROVED")
+            .scalar()
+            or 0
+        )
+        avg_score_raw = session.query(func.avg(CreditEvaluation.score)).scalar()
+        avg_score = float(avg_score_raw) if avg_score_raw is not None else 0.0
+
+        def _count_score_range(lo: int | None, hi: int | None) -> int:
+            q = session.query(func.count(CreditEvaluation.id))
+            if lo is not None:
+                q = q.filter(CreditEvaluation.score >= lo)
+            if hi is not None:
+                q = q.filter(CreditEvaluation.score < hi)
+            return q.scalar() or 0
+
+        pending_offers = (
+            session.query(func.count(CreditOffer.id))
+            .filter(CreditOffer.status == "pending")
+            .scalar()
+            or 0
+        )
+
+        return {
+            "total_evaluations": total,
+            "approval_rate": approved / total if total > 0 else 0.0,
+            "avg_score": avg_score,
+            "pending_offers": pending_offers,
+            "tier_distribution": {
+                "850+": _count_score_range(850, None),
+                "700-849": _count_score_range(700, 850),
+                "550-699": _count_score_range(550, 700),
+                "<550": _count_score_range(None, 550),
+            },
+        }
+
+
+def list_offers(*, limit: int = 20, offset: int = 0) -> tuple[list[dict], int]:
+    with get_session() as session:
+        total = session.query(func.count(CreditOffer.id)).scalar() or 0
+        rows = (
+            session.query(CreditOffer)
+            .order_by(CreditOffer.created_at.desc())
+            .offset(offset)
+            .limit(limit)
+            .all()
+        )
+        items = [
+            {
+                "offer_id": row.id,
+                "evaluation_id": row.evaluation_id,
+                "credit_limit": row.credit_limit,
+                "interest_rate": row.interest_rate,
+                "credit_type": row.credit_type,
+                "status": row.status,
+                "created_at": row.created_at.isoformat(),
+            }
+            for row in rows
+        ]
+        return items, total
 
 
 def save_notification(

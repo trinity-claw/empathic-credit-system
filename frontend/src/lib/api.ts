@@ -1,4 +1,13 @@
-import type { CreditRequest, CreditResponse, JobStatus } from "@/types/api";
+import type {
+  AsyncJobResponse,
+  CreditRequest,
+  CreditResponse,
+  EvaluationListResponse,
+  EvaluationStats,
+  HealthResponse,
+  OfferAcceptResponse,
+  OfferListResponse,
+} from "@/types/api";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
 const AUTH = btoa(
@@ -22,7 +31,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
 }
 
 export const api = {
-  health: () => apiFetch<{ status: string }>("/health"),
+  health: () => apiFetch<HealthResponse>("/health"),
 
   evaluate: (body: CreditRequest) =>
     apiFetch<CreditResponse>("/credit/evaluate", {
@@ -31,17 +40,33 @@ export const api = {
     }),
 
   evaluateAsync: (body: CreditRequest) =>
-    apiFetch<{ job_id: string }>("/credit/evaluate/async", {
+    apiFetch<AsyncJobResponse>("/credit/evaluate/async", {
       method: "POST",
       body: JSON.stringify(body),
     }),
 
+  // corrected path: /credit/evaluate/{job_id}
   jobStatus: (jobId: string) =>
-    apiFetch<JobStatus>(`/credit/jobs/${jobId}`),
+    apiFetch<AsyncJobResponse>(`/credit/evaluate/${jobId}`),
 
   acceptOffer: (offerId: string) =>
-    apiFetch<{ offer_id: string; job_id: string; status: string }>(
-      `/credit/offers/${offerId}/accept`,
-      { method: "POST" }
-    ),
+    apiFetch<OfferAcceptResponse>(`/credit/offers/${offerId}/accept`, {
+      method: "POST",
+    }),
+
+  evaluations: (params?: { limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    if (params?.offset != null) qs.set("offset", String(params.offset));
+    return apiFetch<EvaluationListResponse>(`/credit/evaluations?${qs}`);
+  },
+
+  evaluationStats: () => apiFetch<EvaluationStats>("/credit/evaluations/stats"),
+
+  offers: (params?: { limit?: number; offset?: number }) => {
+    const qs = new URLSearchParams();
+    if (params?.limit != null) qs.set("limit", String(params.limit));
+    if (params?.offset != null) qs.set("offset", String(params.offset));
+    return apiFetch<OfferListResponse>(`/credit/offers?${qs}`);
+  },
 };

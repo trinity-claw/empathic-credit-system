@@ -14,7 +14,7 @@ import {
 
 interface ShapFactor {
   feature: string;
-  impact: number;
+  contribution: number; // matches backend field name
   direction: string;
 }
 
@@ -38,10 +38,10 @@ const LABEL_MAP: Record<string, string> = {
 
 export function ShapChart({ factors }: ShapChartProps) {
   const data = [...factors]
-    .sort((a, b) => Math.abs(b.impact) - Math.abs(a.impact))
+    .sort((a, b) => Math.abs(b.contribution) - Math.abs(a.contribution))
     .map((f) => ({
       label: LABEL_MAP[f.feature] ?? f.feature,
-      impact: f.impact,
+      impact: f.contribution,
     }));
 
   return (

@@ -1,7 +1,9 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Skeleton } from "@/components/ui/skeleton";
 import {
   Area,
   AreaChart,
@@ -16,6 +18,8 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { api } from "@/lib/api";
+import type { EvaluationStats } from "@/types/api";
 
 const SCORE_DISTRIBUTION = [
   { range: "0–100", bons: 12, maus: 88 },
@@ -70,18 +74,38 @@ const tooltipStyle = {
   labelStyle: { color: "#e4e4e7", fontSize: 12 },
 };
 
+const TIER_COLORS: Record<string, string> = {
+  "850+": "#34d399",
+  "700-849": "#60a5fa",
+  "550-699": "#fbbf24",
+  "<550": "#f87171",
+};
+
 export default function AnalyticsPage() {
+  const [stats, setStats] = useState<EvaluationStats | null>(null);
+
+  useEffect(() => {
+    api.evaluationStats().then(setStats).catch(() => null);
+  }, []);
+
+  const tierData = stats
+    ? Object.entries(stats.tier_distribution).map(([range, count]) => ({ range, count }))
+    : [];
+
   return (
     <div className="p-8 space-y-8">
       <div>
         <h1 className="text-2xl font-bold text-zinc-100">Analytics</h1>
         <p className="text-sm text-zinc-500 mt-1">
-          Métricas de performance do modelo · Give Me Some Credit (n=150.000)
+          Performance do modelo · Give Me Some Credit (n=150.000) + dados operacionais em tempo real
         </p>
       </div>
 
-      <Tabs defaultValue="distribution">
+      <Tabs defaultValue="operacional">
         <TabsList className="bg-zinc-800 border border-zinc-700">
+          <TabsTrigger value="operacional" className="data-[state=active]:bg-zinc-700 text-zinc-400 data-[state=active]:text-zinc-100">
+            Operacional
+          </TabsTrigger>
           <TabsTrigger value="distribution" className="data-[state=active]:bg-zinc-700 text-zinc-400 data-[state=active]:text-zinc-100">
             Distribuição
           </TabsTrigger>
@@ -95,6 +119,107 @@ export default function AnalyticsPage() {
             Modelos
           </TabsTrigger>
         </TabsList>
+
+        {/* Operational tab — real data from the running API */}
+        <TabsContent value="operacional" className="mt-4">
+          {stats === null ? (
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
+              <Skeleton className="h-64 w-full bg-zinc-800 rounded-xl" />
+              <Skeleton className="h-64 w-full bg-zinc-800 rounded-xl" />
+            </div>
+          ) : stats.total_evaluations === 0 ? (
+            <Card className="bg-zinc-900 border-zinc-800">
+              <CardContent className="flex flex-col items-center gap-2 py-16 text-zinc-600">
+                <p className="text-sm">Nenhuma avaliação processada ainda.</p>
+                <p className="text-xs">
+                  Os dados operacionais aparecem conforme o sistema for usado.
+                </p>
+              </CardContent>
+            </Card>
+          ) : (
+            <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
+              <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium text-zinc-300">
+                    Distribuição por Tier — Avaliações Reais
+                  </CardTitle>
+                  <p className="text-xs text-zinc-500">
+                    {stats.total_evaluations.toLocaleString("pt-BR")} avaliações ·{" "}
+                    {(stats.approval_rate * 100).toFixed(1)}% aprovadas
+                  </p>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={200}>
+                    <BarChart data={tierData} margin={{ left: 0, right: 8 }}>
+                      <CartesianGrid vertical={false} stroke="#27272a" />
+                      <XAxis
+                        dataKey="range"
+                        tick={{ fill: "#a1a1aa", fontSize: 12 }}
+                        tickLine={false}
+                        axisLine={false}
+                      />
+                      <YAxis
+                        tick={{ fill: "#71717a", fontSize: 11 }}
+                        tickLine={false}
+                        axisLine={false}
+                        allowDecimals={false}
+                      />
+                      <Tooltip
+                        {...tooltipStyle}
+                        formatter={(v) => [v, "Avaliações"]}
+                      />
+                      <Bar dataKey="count" radius={[4, 4, 0, 0]}>
+                        {tierData.map((entry) => (
+                          <Cell
+                            key={entry.range}
+                            fill={TIER_COLORS[entry.range] ?? "#6366f1"}
+                          />
+                        ))}
+                      </Bar>
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+
+              <Card className="bg-zinc-900 border-zinc-800">
+                <CardHeader>
+                  <CardTitle className="text-sm font-medium text-zinc-300">
+                    KPIs Operacionais
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    {[
+                      {
+                        label: "Total avaliações",
+                        value: stats.total_evaluations.toLocaleString("pt-BR"),
+                      },
+                      {
+                        label: "Taxa aprovação",
+                        value: `${(stats.approval_rate * 100).toFixed(1)}%`,
+                      },
+                      {
+                        label: "Score médio",
+                        value: stats.avg_score.toFixed(0),
+                      },
+                      {
+                        label: "Ofertas pendentes",
+                        value: stats.pending_offers.toLocaleString("pt-BR"),
+                      },
+                    ].map((kpi) => (
+                      <div key={kpi.label} className="rounded-lg bg-zinc-800/50 p-3">
+                        <p className="text-xs text-zinc-500">{kpi.label}</p>
+                        <p className="text-xl font-bold text-zinc-100 mt-1 tabular-nums">
+                          {kpi.value}
+                        </p>
+                      </div>
+                    ))}
+                  </div>
+                </CardContent>
+              </Card>
+            </div>
+          )}
+        </TabsContent>
 
         <TabsContent value="distribution" className="mt-4">
           <Card className="bg-zinc-900 border-zinc-800">
