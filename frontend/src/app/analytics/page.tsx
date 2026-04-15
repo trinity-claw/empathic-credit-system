@@ -70,8 +70,14 @@ const MODEL_COMPARISON = [
 ];
 
 const tooltipStyle = {
-  contentStyle: { background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 },
-  labelStyle: { color: "#e4e4e7", fontSize: 12 },
+  contentStyle: {
+    background: "#0a120a",
+    border: "1px solid rgba(0,230,118,0.2)",
+    borderRadius: 8,
+    color: "#e8f5e9",
+  },
+  labelStyle: { color: "rgba(255,255,255,0.6)", fontSize: 12 },
+  itemStyle: { color: "#e8f5e9" },
 };
 
 const TIER_COLORS: Record<string, string> = {
@@ -102,7 +108,7 @@ export default function AnalyticsPage() {
       </div>
 
       <Tabs defaultValue="operacional">
-        <TabsList className="bg-zinc-800 border border-zinc-700">
+        <TabsList className="border">
           <TabsTrigger value="operacional" className="data-[state=active]:bg-zinc-700 text-zinc-400 data-[state=active]:text-zinc-100">
             Operacional
           </TabsTrigger>
@@ -128,7 +134,7 @@ export default function AnalyticsPage() {
               <Skeleton className="h-64 w-full bg-zinc-800 rounded-xl" />
             </div>
           ) : stats.total_evaluations === 0 ? (
-            <Card className="bg-zinc-900 border-zinc-800">
+            <Card className="bg-transparent border-0">
               <CardContent className="flex flex-col items-center gap-2 py-16 text-zinc-600">
                 <p className="text-sm">Nenhuma avaliação processada ainda.</p>
                 <p className="text-xs">
@@ -138,7 +144,7 @@ export default function AnalyticsPage() {
             </Card>
           ) : (
             <div className="grid grid-cols-1 gap-6 md:grid-cols-2">
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="bg-transparent border-0">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium text-zinc-300">
                     Distribuição por Tier — Avaliações Reais
@@ -151,7 +157,7 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={tierData} margin={{ left: 0, right: 8 }}>
-                      <CartesianGrid vertical={false} stroke="#27272a" />
+                      <CartesianGrid vertical={false} stroke="rgba(0,230,118,0.07)" />
                       <XAxis
                         dataKey="range"
                         tick={{ fill: "#a1a1aa", fontSize: 12 }}
@@ -181,7 +187,7 @@ export default function AnalyticsPage() {
                 </CardContent>
               </Card>
 
-              <Card className="bg-zinc-900 border-zinc-800">
+              <Card className="bg-transparent border-0">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium text-zinc-300">
                     KPIs Operacionais
@@ -222,7 +228,7 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="distribution" className="mt-4">
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-transparent border-0">
             <CardHeader>
               <CardTitle className="text-sm font-medium text-zinc-300">
                 Distribuição por Faixa de Score — % Bons vs Maus
@@ -231,7 +237,7 @@ export default function AnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={320}>
                 <BarChart data={SCORE_DISTRIBUTION} margin={{ left: 0, right: 16 }}>
-                  <CartesianGrid vertical={false} stroke="#27272a" />
+                  <CartesianGrid vertical={false} stroke="rgba(0,230,118,0.07)" />
                   <XAxis dataKey="range" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} unit="%" />
                   <Tooltip {...tooltipStyle} formatter={(v, name) => [`${v}%`, name === "bons" ? "Bons pagadores" : "Maus pagadores"]} />
@@ -247,7 +253,7 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="roc" className="mt-4">
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-transparent border-0">
             <CardHeader>
               <CardTitle className="text-sm font-medium text-zinc-300">
                 Curva ROC — AUC = 0.8676
@@ -262,7 +268,7 @@ export default function AnalyticsPage() {
                       <stop offset="95%" stopColor="#6366f1" stopOpacity={0} />
                     </linearGradient>
                   </defs>
-                  <CartesianGrid stroke="#27272a" />
+                  <CartesianGrid stroke="rgba(0,230,118,0.07)" />
                   <XAxis dataKey="fpr" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} label={{ value: "FPR", position: "insideBottomRight", offset: -4, fill: "#71717a", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} label={{ value: "TPR", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 11 }} />
                   <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v) * 100).toFixed(1)}%`]} />
@@ -277,7 +283,7 @@ export default function AnalyticsPage() {
         </TabsContent>
 
         <TabsContent value="calibration" className="mt-4">
-          <Card className="bg-zinc-900 border-zinc-800">
+          <Card className="bg-transparent border-0">
             <CardHeader>
               <CardTitle className="text-sm font-medium text-zinc-300">
                 Curva de Calibração — Brier Score = 0.0488
@@ -286,7 +292,7 @@ export default function AnalyticsPage() {
             <CardContent>
               <ResponsiveContainer width="100%" height={320}>
                 <LineChart data={CALIBRATION_DATA} margin={{ left: 0, right: 16 }}>
-                  <CartesianGrid stroke="#27272a" />
+                  <CartesianGrid stroke="rgba(0,230,118,0.07)" />
                   <XAxis dataKey="predicted" tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} label={{ value: "Prob. Prevista", position: "insideBottomRight", offset: -4, fill: "#71717a", fontSize: 11 }} />
                   <YAxis tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => `${(v * 100).toFixed(0)}%`} label={{ value: "Freq. Real", angle: -90, position: "insideLeft", fill: "#71717a", fontSize: 11 }} />
                   <Tooltip {...tooltipStyle} formatter={(v) => [`${(Number(v) * 100).toFixed(1)}%`]} />
@@ -308,7 +314,7 @@ export default function AnalyticsPage() {
               { key: "ks", label: "KS Statistic", better: "maior", format: (v: number) => v.toFixed(4) },
               { key: "brier", label: "Brier Score", better: "menor", format: (v: number) => v.toFixed(4) },
             ].map(({ key, label, better, format }) => (
-              <Card key={key} className="bg-zinc-900 border-zinc-800">
+              <Card key={key} className="bg-transparent border-0">
                 <CardHeader>
                   <CardTitle className="text-sm font-medium text-zinc-300">
                     {label}
@@ -318,7 +324,7 @@ export default function AnalyticsPage() {
                 <CardContent>
                   <ResponsiveContainer width="100%" height={200}>
                     <BarChart data={MODEL_COMPARISON} layout="vertical" margin={{ left: 8, right: 16 }}>
-                      <CartesianGrid horizontal={false} stroke="#27272a" />
+                      <CartesianGrid horizontal={false} stroke="rgba(0,230,118,0.07)" />
                       <XAxis type="number" domain={[key === "brier" ? 0 : 0.75, key === "brier" ? 0.2 : 1]} tick={{ fill: "#71717a", fontSize: 10 }} tickLine={false} axisLine={false} />
                       <YAxis type="category" dataKey="model" width={80} tick={{ fill: "#a1a1aa", fontSize: 12 }} tickLine={false} axisLine={false} />
                       <Tooltip {...tooltipStyle} formatter={(v) => [format(Number(v))]} />
@@ -326,7 +332,7 @@ export default function AnalyticsPage() {
                         {MODEL_COMPARISON.map((entry, i) => (
                           <Cell
                             key={i}
-                            fill={entry.model === "XGB Calib." ? "#6366f1" : "#3f3f46"}
+                            fill={entry.model === "XGB Calib." ? "#00e676" : "rgba(0,188,212,0.6)"}
                           />
                         ))}
                       </Bar>

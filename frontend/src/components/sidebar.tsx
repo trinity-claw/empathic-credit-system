@@ -1,11 +1,11 @@
 "use client";
 
+import Image from "next/image";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useEffect, useState } from "react";
 import {
   BarChart3,
-  Brain,
   ChartNoAxesCombined,
   History,
   Home,
@@ -46,43 +46,100 @@ export function Sidebar() {
   }, []);
 
   return (
-    <aside className="flex w-60 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900">
-      <div className="flex items-center gap-2.5 border-b border-zinc-800 px-5 py-5">
-        <Brain className="h-5 w-5 shrink-0 text-indigo-400" />
-        <span className="text-sm font-semibold tracking-tight">
-          Empathic Credit
+    <aside
+      className="flex w-60 shrink-0 flex-col"
+      style={{
+        background: "rgba(8, 14, 8, 0.92)",
+        borderRight: "1px solid rgba(0, 230, 118, 0.12)",
+        backdropFilter: "blur(12px)",
+      }}
+    >
+      {/* Brand header */}
+      <div
+        className="flex flex-col gap-2 px-5 py-5"
+        style={{ borderBottom: "1px solid rgba(0, 230, 118, 0.10)" }}
+      >
+        {/* InfinityPay logo — inverted for dark background */}
+        <div className="flex items-center">
+          <Image
+            src="/infinitypay-logo.svg"
+            alt="InfinityPay"
+            width={110}
+            height={28}
+            className="select-none"
+            style={{ filter: "brightness(0) invert(1)" }}
+            priority
+          />
+        </div>
+        {/* Subtitle */}
+        <span
+          className="text-xs font-medium tracking-widest uppercase"
+          style={{ color: "rgba(0, 230, 118, 0.6)" }}
+        >
+          Empathic Credit System
         </span>
       </div>
 
+      {/* Navigation */}
       <nav className="flex-1 space-y-0.5 px-3 py-4">
-        {links.map(({ href, label, icon: Icon }) => (
-          <Link
-            key={href}
-            href={href}
-            className={cn(
-              "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-colors",
-              pathname === href
-                ? "bg-indigo-500/20 text-indigo-300"
-                : "text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
-            )}
-          >
-            <Icon className="h-4 w-4 shrink-0" />
-            {label}
-          </Link>
-        ))}
+        {links.map(({ href, label, icon: Icon }) => {
+          const isActive = pathname === href;
+          return (
+            <Link
+              key={href}
+              href={href}
+              className={cn(
+                "flex items-center gap-3 rounded-lg px-3 py-2 text-sm transition-all duration-150",
+                isActive
+                  ? "text-[#080c08] font-medium"
+                  : "text-zinc-400 hover:text-white"
+              )}
+              style={
+                isActive
+                  ? {
+                      background: "#00e676",
+                      boxShadow: "0 0 14px rgba(0, 230, 118, 0.35)",
+                    }
+                  : undefined
+              }
+              onMouseEnter={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.background =
+                    "rgba(0, 230, 118, 0.08)";
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (!isActive) {
+                  (e.currentTarget as HTMLElement).style.background = "";
+                }
+              }}
+            >
+              <Icon className="h-4 w-4 shrink-0" />
+              {label}
+            </Link>
+          );
+        })}
       </nav>
 
-      <div className="border-t border-zinc-800 px-4 py-4 space-y-2">
+      {/* Status footer */}
+      <div
+        className="px-4 py-4 space-y-2"
+        style={{ borderTop: "1px solid rgba(0, 230, 118, 0.10)" }}
+      >
         <div className="flex items-center gap-2">
           <span
-            className={cn(
-              "h-2 w-2 rounded-full shrink-0",
-              apiStatus === "online" && "bg-emerald-400",
-              apiStatus === "offline" && "bg-red-400",
-              apiStatus === "checking" && "bg-zinc-500"
-            )}
+            className={cn("h-2 w-2 rounded-full shrink-0", {
+              "bg-[#00e676]": apiStatus === "online",
+              "bg-red-400": apiStatus === "offline",
+              "bg-zinc-500": apiStatus === "checking",
+            })}
+            style={
+              apiStatus === "online"
+                ? { boxShadow: "0 0 6px rgba(0, 230, 118, 0.8)" }
+                : undefined
+            }
           />
-          <span className="text-xs text-zinc-500">
+          <span className="text-xs" style={{ color: "rgba(255,255,255,0.4)" }}>
             {apiStatus === "online"
               ? "API online"
               : apiStatus === "offline"
@@ -92,8 +149,16 @@ export function Sidebar() {
         </div>
         {modelVersion && (
           <div className="flex items-center gap-2">
-            <ChartNoAxesCombined className="h-3.5 w-3.5 text-indigo-400 shrink-0" />
-            <span className="text-xs text-zinc-500 truncate">{modelVersion}</span>
+            <ChartNoAxesCombined
+              className="h-3.5 w-3.5 shrink-0"
+              style={{ color: "rgba(0, 230, 118, 0.5)" }}
+            />
+            <span
+              className="text-xs truncate"
+              style={{ color: "rgba(255,255,255,0.35)" }}
+            >
+              {modelVersion}
+            </span>
           </div>
         )}
       </div>

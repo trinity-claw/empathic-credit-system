@@ -31,13 +31,19 @@ const INCOME_COHORTS = [
 ];
 
 const tooltipStyle = {
-  contentStyle: { background: "#18181b", border: "1px solid #3f3f46", borderRadius: 8 },
-  labelStyle: { color: "#e4e4e7", fontSize: 12 },
+  contentStyle: {
+    background: "#0a120a",
+    border: "1px solid rgba(0,230,118,0.2)",
+    borderRadius: 8,
+    color: "#e8f5e9",
+  },
+  labelStyle: { color: "rgba(255,255,255,0.6)", fontSize: 12 },
+  itemStyle: { color: "#e8f5e9" },
 };
 
 function CohortChart({ data, title }: { data: typeof AGE_COHORTS; title: string }) {
   return (
-    <Card className="bg-zinc-900 border-zinc-800">
+    <Card className="bg-transparent border-0">
       <CardHeader>
         <CardTitle className="text-sm font-medium text-zinc-300">{title}</CardTitle>
         <p className="text-xs text-zinc-500">
@@ -47,7 +53,7 @@ function CohortChart({ data, title }: { data: typeof AGE_COHORTS; title: string 
       <CardContent>
         <ResponsiveContainer width="100%" height={240}>
           <BarChart data={data} margin={{ left: 0, right: 16 }}>
-            <CartesianGrid vertical={false} stroke="#27272a" />
+            <CartesianGrid vertical={false} stroke="rgba(0,230,118,0.07)" />
             <XAxis dataKey="cohort" tick={{ fill: "#a1a1aa", fontSize: 12 }} tickLine={false} axisLine={false} />
             <YAxis domain={[0, 1.1]} tick={{ fill: "#71717a", fontSize: 11 }} tickLine={false} axisLine={false} tickFormatter={(v) => v.toFixed(1)} />
             <Tooltip
@@ -105,7 +111,7 @@ export default function FairnessPage() {
         </p>
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-transparent border-0">
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
             <div>
@@ -140,7 +146,7 @@ export default function FairnessPage() {
         <CohortChart data={INCOME_COHORTS} title="Fairness por Quartil de Renda" />
       </div>
 
-      <Card className="bg-zinc-900 border-zinc-800">
+      <Card className="bg-transparent border-0">
         <CardHeader>
           <CardTitle className="text-sm font-medium text-zinc-300">
             Features Emocionais — Análise de Risco Regulatório
