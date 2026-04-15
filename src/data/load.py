@@ -6,8 +6,11 @@ import pandas as pd
 RAW_PATH = Path("data/raw/cs-training.csv")
 
 # mapeamento das colunas originais → snake_case
+# Handles both Kaggle name (SeriousDlqin2yrs) and OpenML name
+# (FinancialDistressNextTwoYears) for the target column.
 COLUMN_RENAME = {
     "SeriousDlqin2yrs": "target",
+    "FinancialDistressNextTwoYears": "target",
     "RevolvingUtilizationOfUnsecuredLines": "revolving_utilization",
     "age": "age",
     "NumberOfTime30-59DaysPastDueNotWorse": "past_due_30_59",
@@ -34,6 +37,10 @@ def load_raw(path: Path = RAW_PATH) -> pd.DataFrame:
         na_values="?",  # OpenML usa '?' para missing values
     )
     df = df.rename(columns=COLUMN_RENAME)
+    # OpenML encodes target as 'Yes'/'No' strings — map to 1/0
+    if not pd.api.types.is_integer_dtype(df["target"]):
+        yes_no_map = {"Yes": 1, "No": 0, "1": 1, "0": 0}
+        df["target"] = df["target"].astype(str).map(yes_no_map).astype(int)
     return df
 
 
