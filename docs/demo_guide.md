@@ -1,174 +1,246 @@
 # Guia de Demo — Empathic Credit System
 
-**Objetivo**: Mostrar em ~8 minutos que o sistema é real, funciona end-to-end, e que cada decisão é explicável.
+**Objetivo**: 8 minutos. Mostrar que o sistema é real, funciona ponta-a-ponta, e que cada decisão é explicável.
 
-**Setup antes de começar**:
+**Subir tudo de uma vez**:
 ```bash
-# Terminal 1 — API
-uv run uvicorn src.api.main:app --reload
-
-# Terminal 2 — Frontend
-cd frontend && npm run dev
+./start.sh
 ```
 
-Abrir no browser: `http://localhost:3000`
+Abre `http://localhost:3000` e `http://localhost:8000/docs` em abas separadas.
 
 ---
 
-## Roteiro — passo a passo
+## PARTE 1 — O que o modelo realmente aprende (entender antes de mostrar)
 
-### 1. Dashboard (2 min)
+### De onde vêm os dados de treinamento
 
-**O que mostrar**: Prova que o sistema está vivo e conectado.
+O modelo foi treinado no dataset **"Give Me Some Credit"** (Kaggle/OpenML, ID 46929).
 
-1. **Abrir o Dashboard (`/`)**
-   - Apontar o **dot verde** no sidebar inferior esquerdo: "API online"
-   - Apontar a versão do modelo embaixo: "xgboost_financial_calibrated"
-   - Frase: *"O sidebar faz polling do `/health` a cada 30 segundos. Se a API cair, o dot fica vermelho."*
+- **150.000 tomadores de crédito reais** dos EUA, observados entre 2005–2007
+- **Target**: `SeriousDlqin2yrs` — o tomador teve atraso grave (90+ dias) nos 2 anos seguintes? (sim/não)
+- **Taxa de default**: 6,68% — dataset desbalanceado, tratado com `class_weight` no baseline e `scale_pos_weight` no XGBoost
 
-2. **KPI cards (top)**
-   - Esses números vêm em tempo real de `GET /credit/evaluations/stats`
-   - Se ainda não tem avaliações: mostrar o empty state ("Nenhuma avaliação ainda")
-   - Frase: *"Total de avaliações, taxa de aprovação, score médio e ofertas aguardando — tudo computado do banco ao vivo."*
+Não existe mock de banco/transações como backend dos dados. O que existe:
+- **`data/raw/cs-training.csv`** — o dataset original baixado via OpenML
+- **`data/processed/{train,val,test}.parquet`** — splits estratificados (70/15/15)
+- **`data/ecs.db`** — SQLite que guarda cada avaliação feita pela API em runtime (isso sim é "ao vivo")
 
-3. **Tiers de crédito (bottom)**
-   - Apontar os 4 cards: Score 850+ → R$ 50k / 1,5% a.m.
-   - Frase: *"O sistema mapeia o score diretamente para um produto de crédito real — limite, taxa e tipo de contrato."*
+Quando a API recebe um `POST /credit/evaluate`, ela pega os campos do request, passa pelo modelo treinado, e salva o resultado no SQLite. As tabelas de `users` e `transactions` existem no schema como estrutura de suporte futuro, mas não são alimentadas no fluxo atual — a avaliação de crédito é autossuficiente.
 
 ---
 
-### 2. Avaliar Crédito — perfil de bom pagador (2 min)
+### Por que cada feature importa (SHAP na prática)
 
-**O que mostrar**: Fluxo completo de uma aprovação com SHAP.
+**Hierarquia real de importância** (confirmada pelos SHAP values no test set):
 
-1. **Navegar para `/evaluate`**
-
-2. **Preencher com um perfil de baixo risco** (ou deixar os valores default e ajustar):
-   ```
-   Utilização rotativo: 0.15
-   Idade: 52
-   Renda mensal: 8000
-   Índice de endividamento: 0.18
-   Atrasos 30-59 dias: 0
-   Atrasos 60-89 dias: 0
-   Atrasos >90 dias: 0
-   ```
-
-3. **Clicar "Avaliar"**
-   - Toast aparece: "Crédito aprovado — Score 780" (ou similar)
-   - Resultado aparece à direita com:
-     - Badge verde **APROVADO**
-     - Score grande (ex: 780)
-     - PD% (probabilidade de default)
-     - Limite aprovado (ex: R$ 20.000) + taxa 2,5% a.m. + tipo "long term"
-   - Frase: *"Isso é o que chega em 50ms. Score + decisão + produto de crédito + explicação SHAP — tudo em uma resposta."*
-
-4. **Apontar o gráfico SHAP (barras horizontais)**
-   - Verde = reduz o risco, Vermelho = aumenta o risco
-   - Frase: *"Esses são os valores de Shapley exatos. Não é aproximação — é o TreeExplainer do SHAP, O(TLD). Isso é o que garante compliance com o Art. 20 da LGPD: o cliente tem direito a explicação para decisões automatizadas."*
-   - Apontar o fator mais importante (provavelmente `age` ou `revolving_utilization`)
-
-5. **Clicar "Aceitar Oferta de Crédito"** (botão verde que aparece após aprovação)
-   - Toast: "Oferta aceita! O crédito está sendo processado."
-   - Frase: *"Aqui entra o rq — enfileira um job assíncrono que processa o deploy do crédito no background. A API respondeu imediatamente, o worker consome na fila do Redis."*
-
-6. **Apontar Request ID e Modelo no rodapé do card**
-   - Frase: *"Request ID rastreável — esse mesmo ID aparece nos logs estruturados JSON e na tabela de audit trail do banco."*
+| Posição | Feature | Lógica |
+|---------|---------|--------|
+| 1ª | `past_due_90` — atrasos graves >90 dias | Histórico de inadimplência grave é o sinal mais forte de comportamento futuro. Quem já atrasou 90+ dias tem chance muito maior de repetir. |
+| 2ª | `revolving_utilization` — % do limite do cartão usado | Se a pessoa usa 90% do limite todo mês, está no limite financeiro. Quanto maior, maior o risco. |
+| 3ª | `past_due_30_59` — atrasos leves 30–59 dias | Atrasos curtos também predizem, mas com força menor que os graves. |
+| 4ª | `age` — idade | Pessoas mais velhas têm histórico mais longo de pagamento e estabilidade. Jovens são mais arriscados estatisticamente. |
+| 5ª+ | `debt_ratio`, `monthly_income`, `open_credit_lines` | Contribuição **pequena** — explicado abaixo. |
 
 ---
 
-### 3. Avaliar Crédito — perfil de alto risco + features emocionais (1 min)
+### Por que renda=1300 e debt_ratio=0.7 ainda aprovam com score alto
 
-**O que mostrar**: Nega crédito com justificativa + demonstra o experimento emocional.
+Esta é a pergunta certa. A resposta direta:
 
-1. **Ainda na página `/evaluate`, trocar os campos**:
-   ```
-   Utilização rotativo: 0.95
-   Atrasos >90 dias: 3
-   Atrasos 30-59 dias: 2
-   Renda mensal: 1500
-   ```
+**O modelo aprendeu os padrões dos dados históricos. E nesses dados, o que de fato previu default foi o histórico de atrasos — não renda ou dívida.**
 
-2. **Clicar "Avaliar"**
-   - Badge vermelho **NEGADO**, score baixo (ex: 280)
-   - Frase: *"Mesmo negando, o sistema explica o motivo — `past_due_90` e `revolving_utilization` são os drivers. Isso é o que diferencia uma decisão auditável de uma caixa preta."*
+Verificação empírica (rodada no próprio dataset):
 
-3. **Expandir o toggle "Features emocionais"**
-   - Preencher `stress_level: 0.8`, `impulsivity_score: 0.6`, `emotional_stability: 0.3`, `financial_stress_events_7d: 5`
-   - Clicar "Avaliar" novamente
-   - Frase: *"Com features emocionais preenchidas, o modelo emocional entra. Mas olha o resultado — o score quase não muda. Isso confirma o que encontrei no notebook 04: delta AUC de -0.0008. As features emocionais não agregam valor preditivo. Recomendei não deployar — custo regulatório da LGPD Art. 11 (dados sensíveis) supera o benefício."*
+```
+Perfil: renda=1300, debt_ratio=0.7, sem nenhum atraso
+→ PD = 4,4%  | Score = 956  ✅ APROVADO
 
----
+Mesmo perfil + past_due_90=3, sentinel=1
+→ PD = 44,4% | Score = 556  ❌ NEGADO
+```
 
-### 4. Histórico (1.5 min)
+A diferença do score com apenas o histórico de atrasos: **-400 pontos**. Uma variação de renda de 500 a 20.000 move o score em **menos de 20 pontos**.
 
-**O que mostrar**: Que as avaliações são persistidas e podem ser auditadas.
+**Por que o dataset funciona assim?**
 
-1. **Clicar no link "Ver no histórico"** (aparece no resultado do evaluate)
-   — ou navegar diretamente para `/history`
+1. `debt_ratio` nesse dataset tem outliers extremos (alguns valores acima de 3000). O modelo aprendeu a ignorar essa feature em boa parte dos casos porque ela é ruidosa.
+2. `monthly_income` tem ~20% de valores ausentes (imputados pela mediana). O modelo viu muita incerteza nessa feature durante o treino.
+3. Historicamente, pessoas com renda baixa mas sem histórico de atraso **de fato não defaultaram** na mesma taxa que quem tinha histórico ruim. O modelo captura isso fielmente.
 
-2. **Tabela com todas as avaliações**
-   - Mostrar as colunas: ID, Decisão (badge colorido), Score (barra visual), PD%, Modelo, Data
-   - Frase: *"Toda avaliação fica registrada com timestamp, modelo usado e payload completo. Trilha de auditoria integral."*
+**O que falta em produção real (e é importante dizer isso ao Pablo):**
 
-3. **Usar os filtros**: clicar em "Aprovadas", depois "Negadas"
-   - Frase: *"Filtro client-side — pode ver só as negações, útil para auditoria de disparidade."*
+Um sistema completo teria duas camadas:
+- **Camada ML** (o que construímos): captura padrões estatísticos de comportamento
+- **Camada de regras de negócio** (política de crédito): cortes duros — renda mínima, DTI máximo, score de bureau obrigatório
 
-4. **Clicar em uma linha** para expandir
-   - O painel mostra: SHAP chart do registro histórico + features de entrada + todos os valores SHAP
-   - Frase: *"Cada registro guarda o SHAP completo. Posso reproduzir a explicação de qualquer decisão passada, mesmo que o modelo seja atualizado depois."*
+O modelo não substitui a política de crédito; ele a complementa. Construir o modelo sem as regras é a primeira entrega — as regras são decisão de negócio, não de ML.
 
 ---
 
-### 5. Analytics — aba Operacional (45 seg)
+### O que os valores SHAP mostram no gráfico
 
-**O que mostrar**: Que a aba operacional reflete dados reais.
+Quando você vê o gráfico de barras no frontend:
 
-1. **Navegar para `/analytics`**
-2. **A aba "Operacional" está selecionada por default**
-   - Mostrar o gráfico de distribuição por tier com dados reais
-   - KPI cards com os números atuais
-   - Frase: *"Essa aba busca os dados do backend ao vivo. Distribuição real dos scores processados, taxa de aprovação e ofertas pendentes."*
+- **Barra verde** = essa feature **reduziu** a probabilidade de default para esse tomador específico
+- **Barra vermelha** = essa feature **aumentou** a probabilidade de default
+- **Comprimento da barra** = magnitude do impacto (quanto ela moveu o score)
+- **Base** = probabilidade média de default do dataset (6,68%)
 
-3. **Clicar nas outras abas** (Curva ROC, Calibração, Modelos)
-   - Frase: *"Essas abas mostram os resultados do treino — são fixos porque vêm do notebook, não mudam em runtime. O que muda é a aba operacional."*
+Exemplo concreto: se `revolving_utilization` aparece verde com valor 0.15 (15% do limite), o SHAP está dizendo "esse tomador usa pouco do limite, o que reduz o risco dele em relação à média do dataset".
+
+---
+
+## PARTE 2 — Roteiro de demo (passo a passo)
+
+### 1. Dashboard (1.5 min)
+
+1. Abrir `/` — apontar o **dot verde** no canto inferior do sidebar: "API online"
+   - *"O sidebar chama `GET /health` a cada 30 segundos. Se a API cair, fica vermelho automaticamente."*
+
+2. Apontar os KPI cards — vêm de `GET /credit/evaluations/stats` ao vivo
+   - *"Total de avaliações, taxa de aprovação, score médio — computados do banco em tempo real."*
+
+3. Apontar os 4 cards de tier — Score 850+ → R$ 50k / 1,5% a.m.
+   - *"O score é mapeado diretamente para um produto de crédito. Isso é o que a API devolve: não só a decisão, mas o produto aprovado."*
+
+---
+
+### 2. Avaliar Crédito — perfil de alto risco → NEGADO (1.5 min)
+
+**Preencher com esse perfil** (melhor começar pela negação — mais fácil de explicar):
+
+```
+Utilização rotativo: 0.92
+Idade: 28
+Renda mensal: 3000
+Índice de endividamento: 0.45
+Linhas de crédito abertas: 8
+Atrasos 30–59 dias: 2
+Atrasos 60–89 dias: 1
+Atrasos >90 dias: 3
+Flag sentinela: 1
+```
+
+- Resultado: **NEGADO**, score ~250–350
+- Apontar o SHAP: `past_due_90` e `revolving_utilization` são as barras vermelhas maiores
+- *"O sistema não só nega — ele explica qual feature foi determinante. Isso é o Art. 20 da LGPD: direito à explicação de decisões automatizadas."*
+
+---
+
+### 3. Avaliar Crédito — perfil limpo → APROVADO + aceitar oferta (2 min)
+
+**Preencher com:**
+
+```
+Utilização rotativo: 0.08
+Idade: 48
+Renda mensal: 12000
+Índice de endividamento: 0.12
+Atrasos 30–59 dias: 0
+Atrasos 60–89 dias: 0
+Atrasos >90 dias: 0
+Flag sentinela: 0
+```
+
+- Resultado: **APROVADO**, score 970+, limite R$ 50.000, taxa 1,5%
+- Apontar gráfico SHAP — todas as barras verdes
+- Clicar **"Aceitar Oferta de Crédito"**
+  - *"Aqui o fluxo assíncrono entra: a API enfileira um job no Redis via rq. O worker processa em background e registra a notificação. A API respondeu imediatamente — não travou esperando o deploy."*
+- Apontar Request ID e modelo no rodapé
+  - *"Esse Request ID aparece nos logs JSON estruturados e no audit trail do banco. Rastreabilidade completa."*
+
+---
+
+### 4. Toggle emocional — demonstrar a decisão de não deployar (1 min)
+
+No mesmo formulário, expandir **"Features emocionais"**:
+
+```
+Stress level: 0.8
+Impulsivity score: 0.6
+Emotional stability: 0.3
+Financial stress events 7d: 5
+```
+
+- Clicar Avaliar
+- Score muda em **pouquíssimo** (< 5 pontos geralmente)
+- *"Isso confirma o notebook 04. Delta AUC = -0.0008. O modelo emocional não aprende nada que o financeiro já não sabe. E essas são features sensíveis — Art. 11 da LGPD, dado sobre saúde mental e emocional. Custo regulatório muito maior que o ganho preditivo. Decidi não deployar."*
+
+---
+
+### 5. Histórico (1 min)
+
+- Clicar "Ver no histórico" ou navegar para `/history`
+- Filtrar por **"Negadas"** — mostrar só as negações
+- Expandir uma linha — painel abre com SHAP completo
+- *"Cada avaliação persiste o SHAP inteiro. Posso reproduzir a explicação de qualquer decisão passada, mesmo depois de retraining."*
 
 ---
 
 ### 6. Fairness (30 seg)
 
-**O que mostrar**: Que o sistema pensa em ética e regulação.
-
-1. **Navegar para `/fairness`**
-2. **Apontar os dois gráficos** (Idade e Renda)
-   - Linha vermelha = 0.80 (limite da regra dos 4/5)
-   - Barra amarela no Q1 de Renda = ~0.82 (no limite)
-   - Frase: *"Regra dos 4/5 da EEOC adaptada para crédito. Todos os coortes de idade passam. Q1 de renda está no limite — isso é um flag para monitoramento em produção."*
-
-3. **Rolar para baixo** — seção "Features Emocionais — Análise de Risco Regulatório"
-   - Mostrar os dois cards: Risco LGPD Art. 11 (vermelho) + Decisão: Não fazer deploy (verde)
-   - Frase: *"Essa é a decisão mais importante do projeto. Provei experimentalmente que não funciona, e documentei o porquê de não deployar. Isso é engineering com responsabilidade."*
+- Navegar para `/fairness`
+- Gráfico de idade: todas as barras acima da linha vermelha 0.80
+  - *"Regra dos 4/5 da EEOC. Nenhum grupo etário é penalizado desproporcionalmente."*
+- Gráfico de renda: Q1 em ~0.82 — no limite
+  - *"Pessoas de baixa renda recebem aprovações a 82% da taxa do grupo de alta renda. No limite, mas passa. Isso é um flag para monitoramento contínuo."*
 
 ---
 
-## Frases para perguntas do Pablo
+## PARTE 3 — Perguntas difíceis do Pablo
 
-| Pergunta | Resposta de 1 frase |
-|----------|---------------------|
-| "Quanto tempo levou?" | "4 dias: 1 de análise, 1 de ML, 1 de backend, 1 de frontend." |
-| "O que você faria diferente?" | "Validação temporal — split por data ao invés de aleatório, para simular uso real em produção." |
-| "Por que SQLite?" | "Zero ops. O desafio diz 'banco à sua escolha'. Migrar para Postgres é uma variável de config — `DATABASE_URL`." |
-| "Por que não usou as features emocionais?" | "Usei. Provei que não funcionam. Delta AUC = -0.0008. Custo regulatório supera o benefício." |
-| "O SHAP é preciso?" | "Exato. TreeExplainer calcula valores de Shapley exatos, não é amostragem. Cada explicação é matematicamente garantida." |
-| "Como você escala isso?" | "API stateless → horizontal scaling. Workers rq → mais instâncias. Gargalo é o banco: SQLite → Postgres na config." |
+### Modelo e dados
+
+**"Por que renda baixa e dívida alta ainda aprovam?"**
+> "Porque o modelo aprendeu com dados históricos reais onde o melhor preditor de inadimplência foi o comportamento passado — atrasos, não renda. Em produção real, você adiciona uma camada de regras de negócio por cima: renda mínima, DTI máximo. O modelo e a política de crédito são duas coisas separadas. Construí o modelo — as regras são decisão do negócio."
+
+**"Você treinou um modelo de ML do zero?"**
+> "Sim. Dataset Give Me Some Credit, 150k tomadores. Baseline Regressão Logística (AUC 0.80), depois XGBoost financeiro (AUC 0.87), depois experimento com features emocionais (AUC 0.869 — pior). Calibração isotônica para garantir que as probabilidades sejam reais, não só ranqueamento."
+
+**"O que é calibração? Por que importa?"**
+> "Um modelo pode ranquear bem — colocar os ruins antes dos bons — mas ter as probabilidades erradas. Se ele diz 'PD = 10%' mas na realidade 30% dessas pessoas defaultaram, as decisões de pricing estão erradas. Calibração isotônica ajusta a curva de probabilidade para que o '10%' realmente signifique 10%. Brier score passou de 0.053 para 0.049 depois da calibração."
+
+**"Por que não usou features emocionais?"**
+> "Testei. Delta AUC = -0.0008 — o modelo emocional foi *pior* que o financeiro puro, estatisticamente. E essas features seriam dados sensíveis pela LGPD Art. 11 — categoria que exige consentimento explícito, base legal específica, e enorme custo de conformidade. Receita zero, risco regulatório alto. Não faz sentido negocial."
+
+**"O SHAP é exato ou aproximado?"**
+> "Exato para tree models. TreeExplainer usa o algoritmo O(TLD) que calcula os valores de Shapley exatos percorrendo as árvores diretamente — não é sampling, não é LIME. Cada barra no gráfico é matematicamente garantida."
+
+### Arquitetura e decisões técnicas
+
+**"Por que SQLite e não Postgres?"**
+> "Zero ops para o case. O desafio diz 'banco à sua escolha'. Trocar para Postgres é uma linha de config — `DATABASE_URL` no `.env`. O código não muda."
+
+**"Como escala?"**
+> "API FastAPI é stateless — sobe quantas instâncias quiser atrás de um load balancer. Workers rq escalam horizontalmente também. O gargalo em escala seria o SQLite — aí sim troca para Postgres. Mas o design já está preparado para isso."
+
+**"Por que rq e não Celery?"**
+> "Celery é mais poderoso, mas tem configuração complexa — brokers, backends, serializers, concurrency models. Para esse case, rq resolve em 50 linhas de código. Seria Celery se precisasse de tasks periódicas, retry com backoff, múltiplas filas prioritárias — coisas que não estão no escopo."
+
+**"Tempo de resposta da API?"**
+> "~50ms para avaliação síncrona — inclui inferência XGBoost + cálculo SHAP exato + escrita no SQLite. Latência de SHAP TreeExplainer é O(TLD) onde T=número de árvores, L=profundidade máxima, D=features. Com 100 árvores, depth 6, 11 features — é rápido."
+
+### Sobre você
+
+**"Por que você não tinha treinado um modelo antes?"**
+> "Nunca tive o contexto certo para ir além do uso de APIs de modelo. Quando surgiu a oportunidade de fazer isso do zero — dataset, pipeline, validação, deploy — fiz. E foi o projeto que mais aprendi em menos tempo. A curiosidade estava lá, faltava o gatilho."
+
+**"Você entende o que está apresentando?"**
+> "Cada número. AUC 0.87 significa que em 87% dos pares aleatórios de bom/mau pagador, o modelo ranqueia o mau antes do bom. KS 0.53 é a maior separação entre as distribuições de score de bons e maus. Brier 0.049 é o MSE entre probabilidade prevista e realizada. Posso derivar qualquer desses de primeiro princípio."
 
 ---
 
-## Sequência de telas para gravar (se precisar de vídeo)
+## PARTE 4 — Sequência recomendada para o vídeo
 
-1. `/` — Dashboard com dados reais (fazer umas 3-4 avaliações antes para ter dados)
-2. `/evaluate` — Aprovação com SHAP → aceitar oferta
-3. `/evaluate` — Negação com justificativa
-4. `/history` — Expandir uma linha com SHAP completo
-5. `/analytics` → aba Operacional + aba Calibração
-6. `/fairness` — Gráficos + seção emocional
+1. `./start.sh` — mostrar o terminal subindo tudo em ~20 segundos
+2. Abrir `http://localhost:3000`
+3. Dashboard → KPIs ao vivo
+4. Evaluate → perfil NEGADO com SHAP (explicar as barras)
+5. Evaluate → perfil APROVADO → aceitar oferta
+6. Toggle emocional → mostrar que não muda o score
+7. Histórico → expandir linha com SHAP
+8. Analytics → aba Operacional
+9. Fairness → gráficos + decisão emocional
+
+**Antes de gravar**: fazer pelo menos 5 avaliações (mix de aprovações e negações) para o Dashboard e Analytics terem dados reais.
