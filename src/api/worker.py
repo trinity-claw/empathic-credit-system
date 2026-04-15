@@ -12,6 +12,8 @@ from redis import Redis
 from rq import Queue
 from rq.job import Job
 
+from src.api import model_store
+from src.api.db import accept_credit_offer, save_notification
 from src.api.schemas import has_emotional_data
 from src.api.settings import get_settings
 
@@ -36,10 +38,6 @@ def _get_queue() -> Queue:
 
 def _run_evaluation(request_data: dict) -> dict:
     """Executed inside the rq worker process."""
-    # Lazy import: model_store triggers heavy ML model loading; deferred to
-    # avoid circular import when this module is imported by the API process.
-    from src.api import model_store
-
     if not model_store.is_loaded():
         model_store.load_models()
 
@@ -64,11 +62,9 @@ def _deploy_credit_offer(offer_id: str, user_id: str | None) -> dict:
     """Executed inside the rq worker process.
 
     Flow: accept offer in DB → update user credit limit → send notification.
-    Reflects CloudWalk's event-driven micro-service architecture where credit
-    deployment is decoupled from scoring for fairness and traceability.
+    Reflects CloudWalk's event-driven architecture where credit deployment
+    is decoupled from scoring for fairness and traceability.
     """
-    from src.api.db import accept_credit_offer, save_notification
-
     offer = accept_credit_offer(offer_id)
     if offer is None:
         logger.warning("Offer not found or already processed: %s", offer_id)
