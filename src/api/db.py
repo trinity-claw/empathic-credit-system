@@ -247,7 +247,7 @@ def list_evaluations(*, limit: int = 20, offset: int = 0) -> tuple[list[dict], i
         )
         items = [
             {
-                "id": row.id,
+                "request_id": row.id,
                 "decision": row.decision,
                 "score": row.score,
                 "probability_of_default": row.probability_of_default,
