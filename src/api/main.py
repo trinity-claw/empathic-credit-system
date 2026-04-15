@@ -1,6 +1,7 @@
 """FastAPI application entry point for the Empathic Credit System."""
 
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 
@@ -73,11 +74,25 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     """Attach a correlation ID to every request for end-to-end tracing.
 
     Reads X-Request-ID from incoming headers if present (e.g. from API gateway),
-    otherwise generates a new UUID. Always echoes the ID back in the response.
+    otherwise generates a new UUID. Logs method, path, status, and duration so
+    every request can be correlated across distributed log queries — same pattern
+    used in automatic-pix-api's InputOutputMiddleware.
     """
     request_id = request.headers.get("X-Request-ID", str(uuid.uuid4()))
+    start = time.monotonic()
     response = await call_next(request)
+    duration_ms = int((time.monotonic() - start) * 1000)
     response.headers["X-Request-ID"] = request_id
+    logger.info(
+        "request",
+        extra={
+            "request_id": request_id,
+            "method": request.method,
+            "path": request.url.path,
+            "status_code": response.status_code,
+            "duration_ms": duration_ms,
+        },
+    )
     return response
 
 
