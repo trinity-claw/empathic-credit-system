@@ -66,12 +66,22 @@ class TestHealth:
         assert body["status"] == "ok"
         assert body["model_loaded"] is True
 
+    def test_healthz_matches_health(self, client):
+        h = client.get("/health")
+        z = client.get("/healthz")
+        assert h.status_code == 200 and z.status_code == 200
+        assert h.json() == z.json()
+
     def test_health_returns_version(self, client):
         resp = client.get("/health")
         assert "model_version" in resp.json()
 
     def test_health_returns_x_request_id(self, client):
         resp = client.get("/health")
+        assert "x-request-id" in resp.headers
+
+    def test_healthz_returns_x_request_id(self, client):
+        resp = client.get("/healthz")
         assert "x-request-id" in resp.headers
 
 

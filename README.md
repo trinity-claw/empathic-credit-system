@@ -40,7 +40,7 @@ The system starts at the customer's brain and ends at a credit decision with a t
 │  GET  /credit/evaluations       → paginated evaluation history               │
 │  GET  /credit/evaluations/stats → aggregate KPIs (approval rate, avg score)  │
 │  GET  /credit/offers            → paginated offer history                    │
-│  GET  /health                   → healthcheck (no auth)                      │
+│  GET  /health, /healthz         → healthcheck (no auth)                      │
 └──────┬───────────────────────────────┬──────────────────────────────────────┘
        │                               │
        ▼                               ▼
@@ -57,15 +57,17 @@ The system starts at the customer's brain and ends at a credit decision with a t
 │  credit_     │              ┌──────────▼───────────┐
 │   evaluations│              │   rq worker           │
 │  credit_     │              │                       │
-│   events     │◄─────────────│  _run_evaluation:     │
-└──────────────┘              │    XGBoost → SHAP     │
-                              │    → credit product   │
+│   events     │              │  _run_evaluation:     │
+└──────────────┘              │    score+SHAP only    │
+                              │    (no SQLite write)  │
                               │                       │
                               │  _deploy_credit_offer:│
                               │    accept offer        │
                               │    save notification   │
                               └───────────────────────┘
 ```
+
+Sync `POST /credit/evaluate` writes `credit_evaluations`, `credit_events`, and `credit_offers` (when approved) from the API. `POST /credit/evaluate/async` runs scoring in the worker for polling only and does **not** insert evaluation rows; offer acceptance still uses the worker to update offers and notifications.
 
 **ML pipeline per credit evaluation request**:
 1. HTTP Basic auth + X-Request-ID correlation
@@ -74,7 +76,7 @@ The system starts at the customer's brain and ends at a credit decision with a t
 4. Score mapping: `score = (1 - P(default)) × 1000`
 5. Credit product assignment: limit + interest rate + type (based on score tier)
 6. SHAP TreeExplainer → per-feature contributions (exact, O(TLD))
-7. Persist to SQLite (`credit_evaluations` + `credit_events` audit trail)
+7. **Sync path only:** persist to SQLite (`credit_evaluations` + `credit_events` audit trail)
 8. If approved: create `credit_offer` record, return `offer_id` in response
 
 **Emotion stream pipeline**:
@@ -104,9 +106,53 @@ credit_evaluations (id PK, decision, probability_of_default, score, shap_explana
 credit_events      (id PK, request_id IDX, event_type, detail JSON)  -- audit trail
 ```
 
-### Example SQL Queries
+### Local database (DBeaver)
 
-**1. All emotional events for a user in the last 7 days:**
+- Default file DB: `data/ecs.db` (see `DATABASE_URL` in [`.env.example`](.env.example)). The file is created on first API startup; tables start **empty** until you call the API.
+- Connect in DBeaver as **SQLite**, path to `data/ecs.db` from the project root (same path the running API uses, or you will see different data).
+
+### Example SQL queries (reproducible)
+
+Run the **prerequisite** curls first so each query returns rows. Use the same credentials as the API (`admin` / `changeme` by default).
+
+**Prerequisite A — one emotional event (for query 1):**
+
+```bash
+curl -sS -X POST http://localhost:8000/emotions/stream \
+  -u admin:changeme \
+  -H "Content-Type: application/json" \
+  -d '{
+    "user_id": "550e8400-e29b-41d4-a716-446655440000",
+    "stress_level": 0.72,
+    "impulsivity_score": 0.45,
+    "emotional_stability": 0.38,
+    "financial_stress_events_7d": 3
+  }'
+```
+
+**Prerequisite B — one high-risk evaluation (for query 2; expect `DENIED`, score under 400):**
+
+```bash
+curl -sS -X POST http://localhost:8000/credit/evaluate \
+  -u admin:changeme \
+  -H "Content-Type: application/json" \
+  -d '{
+    "revolving_utilization": 0.92,
+    "age": 28,
+    "debt_ratio": 0.45,
+    "monthly_income": 3000,
+    "open_credit_lines": 8,
+    "past_due_30_59": 2,
+    "past_due_60_89": 1,
+    "past_due_90": 3,
+    "had_past_due_sentinel": 1
+  }'
+```
+
+**Prerequisite C — any synchronous evaluation (for queries 3–5):** repeat Prerequisite B and/or run an approval example from [API Usage](#api-usage) so `credit_events` and `credit_evaluations` have rows.
+
+**1. Emotional events for one user in the last 7 days** (needs Prerequisite A):
+
 ```sql
 SELECT id, captured_at, stress_level, impulsivity_score, emotional_stability
 FROM emotional_events
@@ -115,7 +161,8 @@ WHERE user_id = '550e8400-e29b-41d4-a716-446655440000'
 ORDER BY captured_at DESC;
 ```
 
-**2. High-risk evaluations (score < 400) with SHAP top factor:**
+**2. High-risk evaluations with SHAP top factor** (needs Prerequisite B):
+
 ```sql
 SELECT id, decision, score, probability_of_default,
        json_extract(shap_explanation, '$.top_factors[0].feature') AS top_factor,
@@ -124,6 +171,34 @@ FROM credit_evaluations
 WHERE score < 400
 ORDER BY score ASC
 LIMIT 100;
+```
+
+**3. Audit trail for the latest credit evaluation** (needs Prerequisite C; uses the most recent `request_id` from evaluations):
+
+```sql
+SELECT ce.id, ce.request_id, ce.event_type, ce.created_at, ce.detail
+FROM credit_events ce
+WHERE ce.request_id = (
+  SELECT id FROM credit_evaluations ORDER BY created_at DESC LIMIT 1
+)
+ORDER BY ce.id ASC;
+```
+
+**4. Recent approved credit offers** (needs at least one synchronous `APPROVED` evaluation):
+
+```sql
+SELECT id, evaluation_id, credit_limit, interest_rate, credit_type, status, created_at
+FROM credit_offers
+ORDER BY created_at DESC
+LIMIT 20;
+```
+
+**5. Decision mix across stored evaluations** (needs Prerequisite C):
+
+```sql
+SELECT decision, COUNT(*) AS n, ROUND(AVG(score), 1) AS avg_score
+FROM credit_evaluations
+GROUP BY decision;
 ```
 
 ---
@@ -183,6 +258,7 @@ df.to_csv('data/raw/cs-training.csv')
 
 # 4. Stratified splits → data/processed/{train,val,test}.parquet
 uv run python -m src.data.split
+uv run jupyter lab
 
 # 5. Train models for the API (from repo root; cwd must be notebooks/ for paths)
 cd notebooks
@@ -298,8 +374,10 @@ curl -X POST http://localhost:8000/emotions/stream \
 
 ### Async evaluation
 
+Queues scoring on the rq worker and returns the result when polled. This path demonstrates the job queue and **does not** write rows to `credit_evaluations` / `credit_events`; use synchronous `POST /credit/evaluate` for a persisted audit trail and DBeaver-friendly history.
+
 ```bash
-# Enqueue
+# Enqueue (requires Redis + worker, e.g. docker compose or ./start.sh)
 curl -X POST http://localhost:8000/credit/evaluate/async \
   -u admin:changeme -H "Content-Type: application/json" -d '{...}'
 # → {"job_id": "abc123", "status": "queued"}
@@ -338,7 +416,9 @@ notebooks/
   05_shap_analysis.ipynb        # SHAP + ethical conclusion
   06_fairness_analysis.ipynb    # Disparate impact analysis (4/5ths rule, LGPD)
 docs/
-  model_card.md        # Full model card with fairness and ethics analysis
+  model_card.md           # Full model card with fairness and ethics analysis
+  demo_guide.md           # Roteiro detalhado de demo (PT-BR)
+  presentation_index.md   # Índice 10–15 min + mapa requisito→evidência
 tests/
   test_metrics.py      # Evaluation metrics (KS, precision, AUC)
   test_emotional.py    # Emotional feature injection + R² non-circularity
