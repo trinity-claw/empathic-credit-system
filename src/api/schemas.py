@@ -14,18 +14,16 @@ EMOTIONAL_FIELD_NAMES = (
 
 
 def has_emotional_data(data: dict) -> bool:
-    """Check if all four emotional fields are present and non-None."""
     return all(data.get(f) is not None for f in EMOTIONAL_FIELD_NAMES)
 
 
 class CreditRequest(BaseModel):
     """Input for a credit evaluation request.
 
-    Financial fields are required. Emotional fields are optional — if omitted,
-    the financial-only model is used; if provided, the emotional model is used.
+    Financial fields are required. Emotional fields are optional — when all
+    four are provided, the emotional model variant is used instead.
     """
 
-    # Financial features (required)
     revolving_utilization: float = Field(
         ..., ge=0, description="Revolving utilization of unsecured lines"
     )
@@ -56,8 +54,6 @@ class CreditRequest(BaseModel):
         default=0, ge=0, le=1, description="Flag: sentinel value in past due fields"
     )
 
-    # Emotional features (optional — triggers emotional model when provided)
-    # If all four are provided, the emotional model is used instead.
     stress_level: float | None = Field(
         default=None, ge=0, le=1, description="Stress level [0,1]"
     )
@@ -167,11 +163,7 @@ class HealthResponse(BaseModel):
 
 
 class EmotionStreamRequest(BaseModel):
-    """Flexible emotional event payload from the mobile app sensor.
-
-    The challenge states the message structure is not predefined — fields are
-    optional to support partial reads from different sensor modalities.
-    """
+    """Emotional event payload from the mobile app sensor. All fields optional."""
 
     user_id: str | None = Field(None, description="Pseudonymised user UUID")
     stress_level: float | None = Field(None, ge=0, le=1)

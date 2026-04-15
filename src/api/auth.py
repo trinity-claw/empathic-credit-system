@@ -13,7 +13,6 @@ security = HTTPBasic()
 def require_auth(
     credentials: HTTPBasicCredentials = Depends(security),
 ) -> str:
-    """Validate HTTP Basic credentials against env-configured username/password."""
     settings = get_settings()
     valid_user = secrets.compare_digest(
         credentials.username.encode(), settings.api_username.encode()

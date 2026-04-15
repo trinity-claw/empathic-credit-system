@@ -1,16 +1,4 @@
-"""SHAP-based explainability for the Empathic Credit System.
-
-This module is used by the API to generate per-request explanations.
-The CreditExplainer wraps shap.TreeExplainer (fast, exact for XGBoost).
-
-Usage
------
-    explainer = CreditExplainer.from_model(xgb_model, feature_names)
-    result = explainer.explain(X_single_row)
-    # result["shap_values"] — dict feature -> float contribution
-    # result["base_value"]  — expected model output (log-odds)
-    # result["top_factors"] — top N factors with sign
-"""
+"""SHAP-based explainability for XGBoost credit models."""
 
 import logging
 from dataclasses import dataclass
@@ -27,8 +15,6 @@ TOP_FACTORS_COUNT = 5
 
 @dataclass
 class ExplanationResult:
-    """SHAP explanation for a single prediction."""
-
     feature_names: list[str]
     shap_values: list[float]
     base_value: float
@@ -55,31 +41,17 @@ class ExplanationResult:
 
 
 class CreditExplainer:
-    """Wraps shap.TreeExplainer for per-request explanations in the API.
-
-    Loaded once at API startup (not per request). Thread-safe for reads.
-    """
-
     def __init__(self, explainer: shap.TreeExplainer, feature_names: list[str]) -> None:
         self._explainer = explainer
         self.feature_names = feature_names
 
     @classmethod
     def from_model(cls, model: Any, feature_names: list[str]) -> "CreditExplainer":
-        """Build a CreditExplainer from a fitted XGBoost model."""
         explainer = shap.TreeExplainer(model)
         logger.info("CreditExplainer initialized for %d features.", len(feature_names))
         return cls(explainer, feature_names)
 
     def explain(self, X: pd.DataFrame | np.ndarray) -> list[ExplanationResult]:
-        """Compute SHAP values for one or more rows.
-
-        Args:
-            X: DataFrame or ndarray with shape (n_samples, n_features).
-
-        Returns:
-            List of ExplanationResult, one per row.
-        """
         if isinstance(X, pd.DataFrame):
             X_arr = X[self.feature_names].astype("float64").values
         else:
@@ -87,7 +59,6 @@ class CreditExplainer:
 
         shap_vals = self._explainer.shap_values(X_arr)
         base_val = float(self._explainer.expected_value)
-        # Approximate output = base + sum(shap) for each row (in log-odds space)
         row_sums = base_val + shap_vals.sum(axis=1)
 
         results = []
@@ -103,5 +74,4 @@ class CreditExplainer:
         return results
 
     def explain_one(self, X: pd.DataFrame | np.ndarray) -> ExplanationResult:
-        """Convenience wrapper for a single row."""
         return self.explain(X)[0]

@@ -15,7 +15,6 @@ logger = logging.getLogger(__name__)
 DEFAULT_THRESHOLD = 0.15
 SCORE_MAX = 1000
 
-# Score tiers for credit product mapping (BRL amounts, monthly rates)
 _CREDIT_TIERS = [
     (850, 50_000.0, 0.015, "long_term"),
     (700, 20_000.0, 0.025, "long_term"),
@@ -41,7 +40,6 @@ _store: dict[str, Any] = {}
 
 
 def load_models() -> None:
-    """Load all models into the global store. Called once at startup."""
     settings = get_settings()
 
     fin_model = joblib.load(settings.model_path)
@@ -64,10 +62,6 @@ def load_models() -> None:
 
 
 def predict(request_data: dict, use_emotional: bool = False) -> dict:
-    """Run inference + SHAP for a single request.
-
-    Returns a dict with decision, probability, score, model_used, shap.
-    """
     if use_emotional:
         features = FINANCIAL_FEATURES + EMOTIONAL_FEATURES
         model = _store["emo_model"]
@@ -103,7 +97,6 @@ def predict(request_data: dict, use_emotional: bool = False) -> dict:
 
 
 def _compute_credit_product(score: int, decision: str) -> dict:
-    """Map ML score to credit product terms (limit, rate, type)."""
     if decision == "DENIED":
         return {"credit_limit": 0.0, "interest_rate": None, "credit_type": "denied"}
     for min_score, limit, rate, credit_type in _CREDIT_TIERS:
