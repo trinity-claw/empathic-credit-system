@@ -128,9 +128,41 @@ LIMIT 100;
 
 ---
 
+## Model & data artifacts (why they are not in Git)
+
+Binary model weights (`models/*.pkl`, `*.joblib`), generated metrics (`models/metrics_log.json`), processed splits (`data/processed/*.parquet`), and the raw CSV under `data/raw/` are **gitignored** on purpose: they are large build outputs that change on every retrain and would bloat history and slow clones. The **source of truth** for how they are produced is the code plus notebooks `02`–`04` (and `src/data/split.py`).
+
+**What the API expects locally** (paths from `src/api/settings.py`):
+
+| File | Role |
+|------|------|
+| `models/xgboost_financial.pkl` | Financial XGBoost |
+| `models/xgboost_financial_calibrator.pkl` | Isotonic calibrator |
+| `models/xgboost_emotional.pkl` | Emotional XGBoost |
+| `models/xgboost_emotional_calibrator.pkl` | Emotional calibrator |
+
+**Docker:** the `Dockerfile` runs `COPY models/ ./models/`. Build the image only **after** those files exist on your machine (see bootstrap below).
+
+---
+
 ## Quickstart
 
-### Local
+### Full stack from zero (new machine / fresh clone)
+
+One script installs Python deps, creates `.env` if missing, downloads OpenML data when needed, builds `data/processed/*.parquet`, **executes notebooks 02–04 headlessly** to populate `models/`, runs `npm install` in `frontend/` if needed, then starts Redis + API + worker + Next.js (same as `start.sh`):
+
+```bash
+chmod +x start-from-scratch.sh start.sh
+./start-from-scratch.sh
+```
+
+- Requires **network** for the first OpenML download.
+- Notebook execution can take **several minutes** (XGBoost + SHAP). Override per-notebook timeout with `ECS_NB_TIMEOUT` (seconds, default `3600`).
+- Press **Ctrl+C** to stop all services started by `start.sh`.
+
+If you already have the four pickle files above, use **`./start.sh`** only (no retrain).
+
+### Local (manual)
 
 ```bash
 # 1. Install dependencies
@@ -138,26 +170,43 @@ uv sync
 
 # 2. Set environment variables
 cp .env.example .env
+# For local Redis (not Docker hostname "redis"), set e.g. REDIS_URL=redis://localhost:6379/0
 
-# 3. Download dataset (required for training notebooks only)
+# 3. Download dataset (OpenML id 46929, same schema as Kaggle Give Me Some Credit)
 uv run python -c "
+from pathlib import Path
 from sklearn.datasets import fetch_openml
+Path('data/raw').mkdir(parents=True, exist_ok=True)
 df = fetch_openml(data_id=46929, as_frame=True).frame
 df.to_csv('data/raw/cs-training.csv')
 "
 
-# 4. Prepare data and train models (run notebooks 01-05 in order)
-uv run jupyter lab
+# 4. Stratified splits → data/processed/{train,val,test}.parquet
+uv run python -m src.data.split
 
-# 5. Start the API
+# 5. Train models for the API (from repo root; cwd must be notebooks/ for paths)
+cd notebooks
+uv run python -m jupyter nbconvert --to notebook --execute \
+  --Execute.timeout=3600 --output /tmp/ecs_02.ipynb 02_baseline_logreg.ipynb
+uv run python -m jupyter nbconvert --to notebook --execute \
+  --Execute.timeout=3600 --output /tmp/ecs_03.ipynb 03_xgboost.ipynb
+uv run python -m jupyter nbconvert --to notebook --execute \
+  --Execute.timeout=3600 --output /tmp/ecs_04.ipynb 04_emotional_features.ipynb
+cd ..
+
+# 6. Start the API (or use ./start.sh for API + worker + Redis + frontend)
 uv run uvicorn src.api.main:app --reload
 ```
+
+Exploratory notebooks (`01`, `05`, `06`, …) are optional for running the API; **`02` → `03` → `04`** are the minimum chain that writes the artifacts under `models/`.
 
 ### Docker
 
 ```bash
 docker compose up --build
 ```
+
+Ensure `models/` contains the four pickle files **before** `docker compose build`, or the API container will fail at startup when loading weights.
 
 API available at `http://localhost:8000`. Interactive docs at `http://localhost:8000/docs`.
 Frontend dashboard at `http://localhost:3000`. Default API credentials: `admin` / `changeme`.
