@@ -6,7 +6,6 @@ from unittest.mock import patch
 import pytest
 from fastapi.testclient import TestClient
 
-# Patch model loading before importing main
 _MOCK_RESULT = {
     "decision": "APPROVED",
     "probability_of_default": 0.05,
@@ -128,3 +127,61 @@ class TestEvaluate:
             headers=_auth_header(),
         )
         assert resp.status_code == 422
+
+
+class TestAsyncEvaluate:
+    _VALID_PAYLOAD = TestEvaluate._VALID_PAYLOAD
+
+    def test_async_returns_job_id(self, client):
+        with patch("src.api.main.enqueue_evaluation", return_value="job-abc-123"):
+            resp = client.post(
+                "/credit/evaluate/async",
+                json=self._VALID_PAYLOAD,
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["job_id"] == "job-abc-123"
+        assert body["status"] == "queued"
+
+    def test_get_finished_job(self, client):
+        with patch(
+            "src.api.main.get_job_result",
+            return_value=("finished", _MOCK_RESULT),
+        ):
+            resp = client.get(
+                "/credit/evaluate/some-job-id",
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "finished"
+        assert body["result"] is not None
+        assert body["result"]["decision"] == "APPROVED"
+
+    def test_get_pending_job(self, client):
+        with patch(
+            "src.api.main.get_job_result",
+            return_value=("started", None),
+        ):
+            resp = client.get(
+                "/credit/evaluate/some-job-id",
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "started"
+        assert body["result"] is None
+
+    def test_get_not_found_job(self, client):
+        with patch(
+            "src.api.main.get_job_result",
+            return_value=("not_found", None),
+        ):
+            resp = client.get(
+                "/credit/evaluate/nonexistent",
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 200
+        body = resp.json()
+        assert body["status"] == "not_found"
