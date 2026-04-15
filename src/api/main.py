@@ -100,13 +100,23 @@ async def request_id_middleware(request: Request, call_next) -> Response:
     return response
 
 
-@app.get("/health", response_model=HealthResponse, tags=["ops"])
-def health():
+def _health_response() -> HealthResponse:
     return HealthResponse(
         status="ok",
         model_loaded=model_store.is_loaded(),
         model_version=model_store.model_version(),
     )
+
+
+@app.get("/health", response_model=HealthResponse, tags=["ops"])
+def health():
+    return _health_response()
+
+
+@app.get("/healthz", response_model=HealthResponse, tags=["ops"])
+def healthz():
+    """Alias for probe compatibility (challenge mentions /healthz)."""
+    return _health_response()
 
 
 def _build_response(
