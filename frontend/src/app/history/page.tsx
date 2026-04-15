@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -270,9 +270,8 @@ export default function HistoryPage() {
               </TableHeader>
               <TableBody>
                 {items.map((ev) => (
-                  <>
+                  <Fragment key={ev.request_id}>
                     <TableRow
-                      key={ev.request_id}
                       className="border-zinc-800 cursor-pointer hover:bg-zinc-800/50 transition-colors"
                       onClick={() =>
                         setExpanded((prev) =>
@@ -312,7 +311,7 @@ export default function HistoryPage() {
                       </TableCell>
                     </TableRow>
                     {expanded === ev.request_id && <ExpandedRow ev={ev} />}
-                  </>
+                  </Fragment>
                 ))}
               </TableBody>
             </Table>
