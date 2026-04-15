@@ -205,9 +205,20 @@ GROUP BY decision;
 
 ## Model & data artifacts (why they are not in Git)
 
-Binary model weights (`models/*.pkl`, `*.joblib`), generated metrics (`models/metrics_log.json`), processed splits (`data/processed/*.parquet`), and the raw CSV under `data/raw/` are **gitignored** on purpose: they are large build outputs that change on every retrain and would bloat history and slow clones. The **source of truth** for how they are produced is the code plus notebooks `02`–`04` (and `src/data/split.py`).
+Binary model weights (`models/*.pkl`, `*.joblib`), generated metrics (`models/metrics_log.json`), processed splits (`data/processed/*.parquet`), and the raw CSV under `data/raw/` are **gitignored** on purpose. The **source of truth** for how they are produced is the code plus notebooks `02`–`04` (and [`src/data/split.py`](src/data/split.py)).
 
-**What the API expects locally** (paths from `src/api/settings.py`):
+**Why keep artifacts out of Git?** (common ML-repo practice)
+
+- **Size and history** — weights can be large; committing them slows clones and inflates the object database.
+- **Not source code** — what you review is the training pipeline (notebooks/scripts + splits), not every binary blob from each experiment.
+- **Retrains churn** — each run produces new pickles; Git diffs on `.pkl` are not meaningful for code review.
+- **Risk control** — some teams avoid accidentally committing trained weights that might reflect sensitive data.
+
+Ignoring them is fine **as long as** there is a clear way to obtain files: this repo documents **`./start-from-scratch.sh`** (full bootstrap), manual commands below, or your own CI/release bucket that restores `models/` before `docker compose build`.
+
+**Tests:** [`tests/test_api.py`](tests/test_api.py) mocks `model_store.predict`, so `uv run pytest` can pass without any `models/*.pkl`; the **running** API (and Docker images) still need the four files below.
+
+**What the API expects locally** (paths from [`src/api/settings.py`](src/api/settings.py)):
 
 | File | Role |
 |------|------|
@@ -235,7 +246,7 @@ chmod +x start-from-scratch.sh start.sh
 - Notebook execution can take **several minutes** (XGBoost + SHAP). Override per-notebook timeout with `ECS_NB_TIMEOUT` (seconds, default `3600`).
 - Press **Ctrl+C** to stop all services started by `start.sh`.
 
-If you already have the four pickle files above, use **`./start.sh`** only (no retrain).
+If you already have the four pickle files above, use **`./start.sh`** only (no retrain). `start.sh` runs [`scripts/normalize_env.py`](scripts/normalize_env.py) first so a stale `MODEL_PATH` (e.g. `models/xgboost_credit.pkl`) is rewritten when the notebook outputs exist, and so legacy `calibration_path` / `CALIBRATION_PATH` lines (same Pydantic field as `CALIBRATOR_PATH`) are removed when `models/xgboost_financial_calibrator.pkl` exists.
 
 ### Local (manual)
 
@@ -258,23 +269,26 @@ df.to_csv('data/raw/cs-training.csv')
 
 # 4. Stratified splits → data/processed/{train,val,test}.parquet
 uv run python -m src.data.split
-uv run jupyter lab
 
-# 5. Train models for the API (from repo root; cwd must be notebooks/ for paths)
+# 5. Train models for the API — notebooks write to ../models/ when cwd is notebooks/
+#    • Interactive: cd notebooks && uv run jupyter lab — run 02 → 03 → 04 in order.
+#    • Headless (same sequence as start-from-scratch.sh):
 cd notebooks
-uv run python -m jupyter nbconvert --to notebook --execute \
-  --Execute.timeout=3600 --output /tmp/ecs_02.ipynb 02_baseline_logreg.ipynb
-uv run python -m jupyter nbconvert --to notebook --execute \
-  --Execute.timeout=3600 --output /tmp/ecs_03.ipynb 03_xgboost.ipynb
-uv run python -m jupyter nbconvert --to notebook --execute \
-  --Execute.timeout=3600 --output /tmp/ecs_04.ipynb 04_emotional_features.ipynb
+export MPLBACKEND=Agg
+NB_TIMEOUT="${ECS_NB_TIMEOUT:-3600}"
+for nb in 02_baseline_logreg 03_xgboost 04_emotional_features; do
+  uv run python -m jupyter nbconvert --to notebook --execute \
+    --Execute.timeout="${NB_TIMEOUT}" \
+    --output "/tmp/ecs_${nb}_executed.ipynb" \
+    "${nb}.ipynb"
+done
 cd ..
 
-# 6. Start the API (or use ./start.sh for API + worker + Redis + frontend)
+# 6. Start the API (or ./start.sh for Redis + worker + frontend)
 uv run uvicorn src.api.main:app --reload
 ```
 
-Exploratory notebooks (`01`, `05`, `06`, …) are optional for running the API; **`02` → `03` → `04`** are the minimum chain that writes the artifacts under `models/`.
+Exploratory notebooks (`01`, `05`, `06`, …) are optional for running the API; **`02` → `03` → `04`** are the minimum chain that writes the four pickle/calibrator files under `models/`.
 
 ### Docker
 

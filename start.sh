@@ -53,6 +53,13 @@ header "Iniciando API (FastAPI)..."
 pkill -f "uvicorn src.api.main" 2>/dev/null || true
 sleep 1
 cd "$ROOT"
+info "Sincronizando .env com artefatos em models/ (se necessário)…"
+uv run python "$ROOT/scripts/normalize_env.py"
+ok "Checagem .env"
+
+# Legacy exports can collide with CALIBRATOR_PATH from .env (pydantic-settings / extras).
+unset CALIBRATION_PATH calibration_path 2>/dev/null || true
+
 uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 \
   >> "$LOG_DIR/api.log" 2>&1 &
 echo $! > "$LOG_DIR/uvicorn.pid"

@@ -102,5 +102,7 @@ fi
 cd "$ROOT"
 
 header "6. Subindo aplicação (Redis + API + worker + Next.js)"
+info "Alinhando .env aos pickles recém-gerados…"
+uv run python "$ROOT/scripts/normalize_env.py" || true
 info "Delegando para start.sh…"
 exec "$ROOT/start.sh"
