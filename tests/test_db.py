@@ -1,13 +1,9 @@
 """Tests for src/api/db.py"""
 
-from unittest.mock import patch
-
-import pytest
-from sqlalchemy import create_engine, text
+from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from src.api.db import (
-    Base,
     CreditEvaluation,
     CreditEvent,
     CreditOffer,
@@ -24,19 +20,9 @@ from src.api.db import (
 _EVALUATION_ID = "eval-000"
 
 
-@pytest.fixture()
-def _use_memory_db():
-    """Override the engine to use an in-memory SQLite database."""
-    engine = create_engine("sqlite:///:memory:")
-
-    with patch("src.api.db._get_engine", return_value=engine):
-        Base.metadata.create_all(engine)
-        yield engine
-
-
 class TestInitDb:
-    def test_creates_all_tables(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_creates_all_tables(self, db_engine):
+        engine = db_engine
         with engine.connect() as conn:
             result = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table'")
@@ -44,7 +30,6 @@ class TestInitDb:
             tables = [row[0] for row in result]
         for expected in (
             "users",
-            "transactions",
             "emotional_events",
             "credit_offers",
             "notifications",
@@ -55,8 +40,8 @@ class TestInitDb:
 
 
 class TestSaveEvaluation:
-    def test_persists_and_reads_back(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_persists_and_reads_back(self, db_engine):
+        engine = db_engine
         save_evaluation(
             request_id=_EVALUATION_ID,
             decision="APPROVED",
@@ -75,8 +60,8 @@ class TestSaveEvaluation:
         assert record.score == 950
         assert record.model_used == "xgboost_financial_calibrated"
 
-    def test_payload_stored_as_dict(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_payload_stored_as_dict(self, db_engine):
+        engine = db_engine
         payload = {"age": 45, "monthly_income": 5000.0}
         save_evaluation(
             request_id="test-456",
@@ -95,8 +80,8 @@ class TestSaveEvaluation:
 
 
 class TestCreditEvent:
-    def test_creates_events_table(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_creates_events_table(self, db_engine):
+        engine = db_engine
         with engine.connect() as conn:
             result = conn.execute(
                 text("SELECT name FROM sqlite_master WHERE type='table'")
@@ -104,8 +89,8 @@ class TestCreditEvent:
             tables = [row[0] for row in result]
         assert "credit_events" in tables
 
-    def test_log_event_persists(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_log_event_persists(self, db_engine):
+        engine = db_engine
         log_event("req-001", "request_received")
         log_event("req-001", "model_scored", {"model": "xgboost_financial"})
 
@@ -124,8 +109,8 @@ class TestCreditEvent:
 
 
 class TestEmotionalEvent:
-    def test_save_emotional_event(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_save_emotional_event(self, db_engine):
+        engine = db_engine
         payload = {
             "stress_level": 0.7,
             "impulsivity_score": 0.4,
@@ -141,11 +126,11 @@ class TestEmotionalEvent:
         assert record.stress_level == 0.7
         assert record.impulsivity_score == 0.4
 
-    def test_raw_payload_stored(self, _use_memory_db):
+    def test_raw_payload_stored(self, db_engine):
         payload = {"stress_level": 0.5, "custom_field": "vendor_data"}
         save_emotional_event(event_id="ev-002", user_id=None, payload=payload)
 
-        with Session(_use_memory_db) as session:
+        with Session(db_engine) as session:
             record = session.get(EmotionalEvent, "ev-002")
 
         assert isinstance(record.raw_payload, dict)
@@ -164,8 +149,8 @@ class TestCreditOffer:
             shap_explanation={},
         )
 
-    def test_save_and_accept_offer(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_save_and_accept_offer(self, db_engine):
+        engine = db_engine
         self._create_eval(engine)
 
         save_credit_offer(
@@ -184,8 +169,8 @@ class TestCreditOffer:
         assert offer.status == "pending"
         assert offer.credit_limit == 50000.0
 
-    def test_accept_offer_changes_status(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_accept_offer_changes_status(self, db_engine):
+        engine = db_engine
         self._create_eval(engine)
 
         save_credit_offer(
@@ -201,12 +186,12 @@ class TestCreditOffer:
         assert result is not None
         assert result.status == "accepted"
 
-    def test_accept_nonexistent_offer_returns_none(self, _use_memory_db):
+    def test_accept_nonexistent_offer_returns_none(self, db_engine):
         result = accept_credit_offer("does-not-exist")
         assert result is None
 
-    def test_accept_already_accepted_offer_returns_none(self, _use_memory_db):
-        engine = _use_memory_db
+    def test_accept_already_accepted_offer_returns_none(self, db_engine):
+        engine = db_engine
         self._create_eval(engine)
 
         save_credit_offer(
@@ -223,7 +208,7 @@ class TestCreditOffer:
 
 
 class TestNotification:
-    def test_save_notification(self, _use_memory_db):
+    def test_save_notification(self, db_engine):
         save_notification(
             notification_id="notif-001",
             user_id=None,
@@ -232,7 +217,7 @@ class TestNotification:
             payload={"credit_limit": 50000.0},
         )
 
-        with Session(_use_memory_db) as session:
+        with Session(db_engine) as session:
             record = session.get(Notification, "notif-001")
 
         assert record is not None

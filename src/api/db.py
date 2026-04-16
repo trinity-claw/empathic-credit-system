@@ -41,22 +41,9 @@ class User(Base):
         DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
     )
     current_credit_limit: Mapped[float] = mapped_column(Float, default=0.0)
+    current_interest_rate: Mapped[float | None] = mapped_column(Float, nullable=True)
     credit_type: Mapped[str | None] = mapped_column(String(32), nullable=True)
     last_score: Mapped[int | None] = mapped_column(Integer, nullable=True)
-
-
-class Transaction(Base):
-    __tablename__ = "transactions"
-
-    id: Mapped[str] = mapped_column(String(36), primary_key=True)
-    user_id: Mapped[str] = mapped_column(String(36), ForeignKey("users.id"), index=True)
-    created_at: Mapped[datetime] = mapped_column(
-        DateTime(timezone=True), default=lambda: datetime.now(timezone.utc)
-    )
-    amount: Mapped[float] = mapped_column(Float)
-    transaction_type: Mapped[str] = mapped_column(String(32))
-    status: Mapped[str] = mapped_column(String(16), default="completed")
-    extra: Mapped[dict | None] = mapped_column(JSON, nullable=True)
 
 
 class EmotionalEvent(Base):
@@ -226,13 +213,71 @@ def save_credit_offer(
 
 def accept_credit_offer(offer_id: str) -> CreditOffer | None:
     with get_session() as session:
-        offer = session.get(CreditOffer, offer_id)
-        if offer is None or offer.status != "pending":
-            return None
-        offer.status = "accepted"
-        session.commit()
-        session.refresh(offer)
-        return offer
+        try:
+            offer = session.get(CreditOffer, offer_id)
+            if offer is None or offer.status != "pending":
+                return None
+            offer.status = "accepted"
+            session.commit()
+            session.refresh(offer)
+            return offer
+        except Exception:
+            session.rollback()
+            raise
+
+
+def get_credit_offer(offer_id: str) -> CreditOffer | None:
+    with get_session() as session:
+        return session.get(CreditOffer, offer_id)
+
+
+def notification_exists_for_offer(offer_id: str, notification_type: str) -> bool:
+    with get_session() as session:
+        q = session.query(func.count(Notification.id)).filter(
+            Notification.offer_id == offer_id,
+            Notification.notification_type == notification_type,
+        )
+        return (q.scalar() or 0) > 0
+
+
+def apply_credit_to_user(
+    *,
+    user_id: str,
+    credit_limit: float,
+    interest_rate: float,
+    credit_type: str,
+) -> None:
+    """Idempotently apply approved credit terms to a user profile.
+
+    Creates the user row if it does not yet exist (offers may be issued
+    for users not previously materialized in the local DB).
+    """
+    with get_session() as session:
+        try:
+            user = session.get(User, user_id)
+            if user is None:
+                user = User(id=user_id)
+                session.add(user)
+            user.current_credit_limit = credit_limit
+            user.current_interest_rate = interest_rate
+            user.credit_type = credit_type
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
+
+
+def update_notification_status(notification_id: str, status: str) -> None:
+    with get_session() as session:
+        try:
+            record = session.get(Notification, notification_id)
+            if record is None:
+                return
+            record.status = status
+            session.commit()
+        except Exception:
+            session.rollback()
+            raise
 
 
 def list_evaluations(*, limit: int = 20, offset: int = 0) -> tuple[list[dict], int]:
