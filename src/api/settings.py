@@ -29,7 +29,8 @@ class Settings(BaseSettings):
     model_version: str = "v1.0.0"
 
     database_url: str = "sqlite:///./data/ecs.db"
-    redis_url: str = "redis://redis:6379/0"
+    # Default for API/worker on the host; docker-compose sets REDIS_URL=redis://redis:6379/0 in containers.
+    redis_url: str = "redis://127.0.0.1:6379/0"
 
     log_level: str = "INFO"
 

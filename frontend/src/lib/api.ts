@@ -20,6 +20,23 @@ const AUTH = btoa(
   `${process.env.NEXT_PUBLIC_API_USER ?? "admin"}:${process.env.NEXT_PUBLIC_API_PASS ?? "changeme"}`
 );
 
+
+function messageFromErrorBody(status: number, raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return `Request failed (${status})`;
+  try {
+    const j = JSON.parse(trimmed) as { detail?: unknown };
+    const d = j.detail;
+    if (typeof d === "string") return d;
+    if (Array.isArray(d) && d.length > 0) {
+      const first = d[0] as { msg?: string };
+      if (typeof first?.msg === "string") return first.msg;
+    }
+  } catch {
+  }
+  return trimmed.length > 280 ? `${trimmed.slice(0, 277)}…` : trimmed;
+}
+
 async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${apiBase()}${path}`, {
     ...init,
@@ -31,7 +48,7 @@ async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`API ${res.status}: ${text}`);
+    throw new Error(messageFromErrorBody(res.status, text));
   }
   return res.json() as Promise<T>;
 }
