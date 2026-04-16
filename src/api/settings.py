@@ -33,6 +33,11 @@ class Settings(BaseSettings):
 
     log_level: str = "INFO"
 
+    notification_webhook_url: str | None = Field(
+        default=None,
+        description="If set, POST JSON credit notifications here (gateway or tools like webhook.site).",
+    )
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @model_validator(mode="before")
