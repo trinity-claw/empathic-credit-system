@@ -26,34 +26,12 @@ models/*.json
 .worktrees/
 
 # IDE / OS
+
 .vscode/
 .idea/
 .DS_Store
-
-# Cursor IDE (regras internas do assistente — não relevante para o avaliador)
 .cursor/
 
-# Documentos de preparação pessoal — não fazem parte da entrega técnica
-docs/presentation_script.md
-docs/study_guide.md
-docs/demo_guide.md
-
-# Logs gerados pelo start.sh
-.logs/
-
-# AI assistant configuration — não relevante para o avaliador
-CLAUDE.md
-AGENTS.md
-frontend/CLAUDE.md
-frontend/AGENTS.md
-
-# Frontend legado (substituído pelo Next.js)
-streamlit_app.py
-
-# Enunciado do case — o avaliador já possui
-CHALLENGE.MD
-
-# Frontend — dependências e build
 frontend/node_modules/
 frontend/.next/
 frontend/out/
