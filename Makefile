@@ -1,4 +1,4 @@
-.PHONY: train test lint format serve docker clean
+.PHONY: train test lint format check serve docker clean
 
 train:
 	uv run python -m src.data.split
@@ -13,6 +13,9 @@ lint:
 format:
 	uv run ruff check src/ tests/ --fix
 	uv run ruff format src/ tests/
+
+check: lint test
+	@echo "All checks passed."
 
 serve:
 	uv run uvicorn src.api.main:app --reload

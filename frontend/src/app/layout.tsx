@@ -15,7 +15,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="pt-BR" className={`${inter.variable} h-full`} suppressHydrationWarning>
-      <body className="h-full antialiased">
+      <body className="h-full antialiased" suppressHydrationWarning>
         {/* Animated ring background */}
         <WebGLRings />
 
