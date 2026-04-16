@@ -8,6 +8,9 @@ WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ENV NEXT_TELEMETRY_DISABLED=1
+# Where Next rewrites /api/* (server-side). In compose this must be the API service hostname.
+ARG BACKEND_INTERNAL_URL=http://127.0.0.1:8000
+ENV BACKEND_INTERNAL_URL=${BACKEND_INTERNAL_URL}
 RUN npm run build
 
 FROM node:22-alpine AS runner

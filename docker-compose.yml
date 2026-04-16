@@ -59,10 +59,13 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        # Next server proxies /api/* here; the browser never calls this host directly.
+        BACKEND_INTERNAL_URL: http://api:8000
     ports:
       - "3000:3000"
     environment:
-      NEXT_PUBLIC_API_URL: http://api:8000
+      BACKEND_INTERNAL_URL: http://api:8000
     depends_on:
       api:
         condition: service_healthy

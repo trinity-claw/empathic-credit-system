@@ -403,7 +403,8 @@ npm install
 npm run dev
 ```
 
-Opens at `http://localhost:3000` with 5 pages:
+Opens at `http://localhost:3000` with 5 pages. The UI calls the FastAPI backend via **same-origin** `/api/...` (Next.js rewrites to the API). With Docker Compose, the rewrite target is the internal `http://api:8000` URL on the **Next server only** — the browser must never use that hostname (it would fail with “Failed to fetch”).
+
 - **Dashboard** — live KPIs (approval rate, avg score), recent decisions, credit product tiers
 - **Credit assessment** — interactive form: submit borrower data, receive score + SHAP waterfall + offer acceptance
 - **History** — paginated evaluation history with expandable SHAP details per row
