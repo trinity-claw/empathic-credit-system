@@ -14,9 +14,9 @@
 
 ## Dataset
 
-**Source**: [Give Me Some Credit](https://www.kaggle.com/c/GiveMeSomeCredit) — Kaggle / OpenML ID 46929  
-**Size**: 150,000 observations, 10 financial features  
-**Target**: `SeriousDlqin2yrs` — 1 if borrower experienced 90+ days past due or worse within 2 years  
+**Source**: [Give Me Some Credit](https://www.kaggle.com/c/GiveMeSomeCredit) — Kaggle / OpenML ID 46929
+**Size**: 150,000 observations, 10 financial features
+**Target**: `SeriousDlqin2yrs` — 1 if borrower experienced 90+ days past due or worse within 2 years
 **Positive class rate**: 6.68% (imbalance ratio ≈ 14:1)
 
 ### Features

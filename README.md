@@ -48,9 +48,9 @@ The system starts at the customer's brain and ends at a credit decision with a t
 │   SQLite     │              │   Redis             │
 │              │              │                     │
 │  users       │              │  Queue: credit_eval  │  ← scoring jobs
-│  transactions│              │  Queue: credit_eval  │  ← deployment jobs
-│  emotional   │              │  Pub/Sub: emotion    │  ← stream consumers
-│   _events    │              │   _stream            │
+│  emotional   │              │  Queue: credit_eval  │  ← deployment jobs
+│   _events    │              │  Pub/Sub: emotion    │  ← stream consumers
+│              │              │   _stream            │
 │  credit_     │              └──────────┬───────────┘
 │   offers     │                         │
 │  notifications│                        │
@@ -94,16 +94,110 @@ Sync `POST /credit/evaluate` writes `credit_evaluations`, `credit_events`, and `
 
 ## Database Schema
 
-Seven tables with foreign keys and indexes:
+The physical schema is created by SQLAlchemy in [`src/api/db.py`](src/api/db.py) (`Base.metadata.create_all` → SQLite by default). There are **6 tables**; foreign keys and indexes match the `ForeignKey` / `index=True` definitions in code.
 
-```sql
-users              (id PK, external_id IDX, current_credit_limit, credit_type, last_score)
-transactions       (id PK, user_id FK→users IDX, amount, transaction_type, status)
-emotional_events   (id PK, user_id FK→users IDX, stress_level, impulsivity_score, ...)
-credit_offers      (id PK, user_id FK→users IDX, evaluation_id FK→credit_evaluations, ...)
-notifications      (id PK, user_id FK→users IDX, offer_id, notification_type, status)
-credit_evaluations (id PK, decision, probability_of_default, score, shap_explanation JSON)
-credit_events      (id PK, request_id IDX, event_type, detail JSON)  -- audit trail
+**Diagram (DBML)** — copy the block below and paste it into [dbdiagram.io](https://dbdiagram.io/d) (or a `.dbml` file per the [DBML](https://dbml.dbdiagram.io/docs/) spec) to view the interactive ER diagram with relationships and notes.
+
+```dbml
+// Empathic Credit System — SQLite (see DATABASE_URL)
+// Source of truth: src/api/db.py
+
+Project ecs_api {
+  Note: '''
+    Runtime: SQLite file (DATABASE_URL), not a hosted server type in DBML.
+    credit_events.request_id correlates with credit_evaluations.id / X-Request-ID (audit);
+    there is no ORM ForeignKey on that column.
+    notifications.offer_id points to credit_offers.id by convention only (no DB FK).
+  '''
+}
+
+Table users {
+  id varchar(36) [pk, note: 'UUID string']
+  external_id varchar(128) [null, note: 'optional upstream id']
+  created_at datetime [not null, note: 'UTC']
+  current_credit_limit float [not null, default: 0, note: 'BRL']
+  credit_type varchar(32) [null]
+  last_score int [null, note: 'last ECS score 0–1000']
+
+  Indexes {
+    external_id [name: 'ix_users_external_id']
+  }
+}
+
+Table credit_evaluations {
+  id varchar(36) [pk, note: 'sync POST /credit/evaluate: equals X-Request-ID']
+  created_at datetime [not null, note: 'UTC']
+  decision varchar(10) [not null, note: 'APPROVED | DENIED']
+  probability_of_default float [not null, note: 'calibrated P(default)']
+  score int [not null, note: '0 = high risk, 1000 = low risk']
+  model_used varchar(64) [not null, note: 'e.g. xgboost_financial_calibrated']
+  request_payload json [not null, note: 'borrower features as submitted']
+  shap_explanation json [not null, note: 'SHAP dict + top_factors']
+}
+
+Table credit_offers {
+  id varchar(36) [pk, note: 'returned as offer_id when APPROVED']
+  user_id varchar(36) [null, note: 'FK → users.id']
+  evaluation_id varchar(36) [not null, note: 'FK → credit_evaluations.id']
+  created_at datetime [not null, note: 'UTC']
+  credit_limit float [not null, note: 'BRL']
+  interest_rate float [not null, note: 'monthly rate']
+  credit_type varchar(32) [not null, note: 'short_term | long_term | denied']
+  status varchar(16) [not null, default: 'pending', note: 'pending | accepted']
+
+  Indexes {
+    evaluation_id [name: 'ix_credit_offers_evaluation_id']
+    user_id [name: 'ix_credit_offers_user_id']
+  }
+}
+
+Table credit_events {
+  id integer [pk, increment, note: 'SQLite autoincrement']
+  request_id varchar(36) [not null, note: 'same id space as credit_evaluations.id']
+  event_type varchar(32) [not null, note: 'request_received | model_scored | …']
+  created_at datetime [not null, note: 'UTC']
+  detail json [null]
+
+  Indexes {
+    request_id [name: 'ix_credit_events_request_id']
+  }
+}
+
+Table emotional_events {
+  id varchar(36) [pk]
+  user_id varchar(36) [null, note: 'FK → users.id']
+  captured_at datetime [not null, note: 'UTC']
+  stress_level float [null, note: '0–1']
+  impulsivity_score float [null, note: '0–1']
+  emotional_stability float [null, note: '0–1']
+  financial_stress_events_7d int [null, note: '0–20']
+  raw_payload json [null, note: 'full POST /emotions/stream body']
+
+  Indexes {
+    user_id [name: 'ix_emotional_events_user_id']
+  }
+}
+
+Table notifications {
+  id varchar(36) [pk]
+  user_id varchar(36) [null, note: 'FK → users.id']
+  offer_id varchar(36) [null, note: 'logical → credit_offers.id (no FK in ORM)']
+  created_at datetime [not null, note: 'UTC']
+  notification_type varchar(32) [not null]
+  payload json [null]
+  status varchar(16) [not null, default: 'sent']
+
+  Indexes {
+    user_id [name: 'ix_notifications_user_id']
+  }
+}
+
+// --- Foreign keys (SQLAlchemy) ----------------------------------------------
+
+Ref: credit_offers.user_id > users.id
+Ref: credit_offers.evaluation_id > credit_evaluations.id
+Ref: emotional_events.user_id > users.id
+Ref: notifications.user_id > users.id
 ```
 
 ### Local database (DBeaver)
@@ -311,8 +405,8 @@ npm run dev
 
 Opens at `http://localhost:3000` with 5 pages:
 - **Dashboard** — live KPIs (approval rate, avg score), recent decisions, credit product tiers
-- **Avaliar Crédito** — interactive form: submit borrower data, receive score + SHAP waterfall + offer acceptance
-- **Histórico** — paginated evaluation history with expandable SHAP details per row
+- **Credit assessment** — interactive form: submit borrower data, receive score + SHAP waterfall + offer acceptance
+- **History** — paginated evaluation history with expandable SHAP details per row
 - **Analytics** — operational metrics (live) + ROC curve, calibration plot, model comparison (training data)
 - **Fairness** — 4/5ths rule by age/income cohort, LGPD regulatory risk analysis
 
@@ -384,6 +478,36 @@ curl -X POST http://localhost:8000/credit/offers/{offer_id}/accept \
 # → {"offer_id": "...", "job_id": "...", "status": "queued"}
 ```
 
+The rq worker runs `_deploy_credit_offer`, persists a `Notification`, and calls `deliver_notification`. If `NOTIFICATION_WEBHOOK_URL` is set, the worker **POSTs JSON** to that URL; otherwise it logs a mock “mobile push” event.
+
+#### Testing the notification webhook (webhook.site)
+
+You can use [Webhook.site](https://webhook.site) (or any request bin) as a stand-in for an FCM/APNS gateway: it gives you a unique HTTPS URL that shows each request instantly.
+
+1. Open Webhook.site and copy **Your unique URL** (keep this private; do not commit it).
+2. In your **`.env`** (not tracked by git), set:
+   ```bash
+   NOTIFICATION_WEBHOOK_URL=https://webhook.site/<your-uuid>
+   ```
+3. **Restart the worker** so it picks up the variable (`docker compose restart worker`, or restart `./start.sh` / your local worker process).
+4. Obtain an **approved** evaluation with an `offer_id` (e.g. `POST /credit/evaluate` with a low-risk payload, or use the dashboard **Credit assessment** page).
+5. Call `POST /credit/offers/{offer_id}/accept` (curl or UI). When the job finishes, Webhook.site should show a **POST** with JSON like:
+   ```json
+   {
+     "notification_id": "...",
+     "user_id": null,
+     "offer_id": "...",
+     "type": "credit_deployed",
+     "payload": {
+       "credit_limit": 50000.0,
+       "interest_rate": 0.015,
+       "credit_type": "long_term"
+     }
+   }
+   ```
+
+If nothing appears, confirm Redis + worker are running and check worker logs for `notification.delivery_failed`.
+
 ### Real-time emotion stream
 
 ```bash
@@ -432,7 +556,7 @@ src/
     main.py            # FastAPI app (lifespan, middleware, routes)
     schemas.py         # Pydantic models: CreditRequest, CreditResponse, EmotionStreamRequest
     auth.py            # HTTP Basic authentication
-    db.py              # SQLAlchemy + SQLite (7 tables)
+    db.py              # SQLAlchemy + SQLite (6 tables)
     model_store.py     # Singleton model/explainer + credit product mapping
     worker.py          # rq jobs: scoring, deployment; Redis Pub/Sub publisher
     settings.py        # Pydantic Settings from .env
@@ -445,8 +569,8 @@ notebooks/
   06_fairness_analysis.ipynb    # Disparate impact analysis (4/5ths rule, LGPD)
 docs/
   model_card.md           # Full model card with fairness and ethics analysis
-  demo_guide.md           # Roteiro detalhado de demo (PT-BR)
-  presentation_index.md   # Índice 10–15 min + mapa requisito→evidência
+  demo_guide.md           # Detailed demo script (Portuguese)
+  presentation_index.md   # 10–15 min talk index + requirement→evidence map
 tests/
   test_metrics.py      # Evaluation metrics (KS, precision, AUC)
   test_emotional.py    # Emotional feature injection + R² non-circularity
@@ -466,9 +590,21 @@ tests/
 make test    # uv run pytest
 make lint    # uv run ruff check + format check
 make format  # uv run ruff check --fix + format
+make check   # lint + test (full local Python gate)
 make serve   # uv run uvicorn src.api.main:app --reload
 make docker  # docker compose up --build
 ```
+
+### Development workflow
+
+After `uv sync` (include dev dependencies so `pre-commit` is available):
+
+```bash
+uv run pre-commit install   # once per clone: fast hooks on every commit
+uv run pre-commit run --all-files   # optional: run hooks on the whole tree
+```
+
+Commit hooks run **Ruff** (lint with auto-fix where safe, plus format) and lightweight file checks (trailing whitespace, TOML/YAML, merge conflicts, etc.). They intentionally **do not** run the full test suite; use `make check` or `make test` before pushing. The Next.js app under `frontend/` has its own toolchain (`npm run lint`, `npm run build`).
 
 ---
 
@@ -476,7 +612,7 @@ make docker  # docker compose up --build
 
 ### Sensitive Data Classification
 
-Emotional data (stress, impulsivity, stability) is **highly sensitive** — it can serve as a proxy for mental health status, disability, or protected characteristics. LGPD classifies it as **dados sensíveis** under Article 11, requiring explicit consent and the highest protection tier.
+Emotional data (stress, impulsivity, stability) is **highly sensitive** — it can serve as a proxy for mental health status, disability, or protected characteristics. Under Brazil’s LGPD (Article 11), this is **sensitive personal data** (*dados pessoais sensíveis*), requiring explicit consent and the highest protection tier.
 
 ### Encryption
 
