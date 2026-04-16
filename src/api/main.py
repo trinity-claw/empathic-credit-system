@@ -5,9 +5,10 @@ import time
 import uuid
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, Request, Response
+from fastapi import Depends, FastAPI, HTTPException, Request, Response
 from fastapi.middleware.cors import CORSMiddleware
 from pythonjsonlogger.json import JsonFormatter
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 from src.api import model_store
 from src.api.auth import require_auth
@@ -45,6 +46,12 @@ from src.api.worker import (
 )
 
 _settings = get_settings()
+
+_QUEUE_UNAVAILABLE = (
+    "Credit queue is temporarily unavailable (Redis). "
+    "Ensure Redis is running. If the API runs on the host (not inside Docker Compose), "
+    "use REDIS_URL=redis://127.0.0.1:6379/0 instead of redis://redis:6379/0."
+)
 handler = logging.StreamHandler()
 handler.setFormatter(JsonFormatter())
 logging.basicConfig(
@@ -187,7 +194,11 @@ def evaluate_credit_async(
     request: CreditRequest,
     _user: str = Depends(require_auth),
 ) -> AsyncJobResponse:
-    job_id = enqueue_evaluation(request.model_dump())
+    try:
+        job_id = enqueue_evaluation(request.model_dump())
+    except RedisConnectionError as exc:
+        logger.exception("Redis unavailable for async evaluation")
+        raise HTTPException(status_code=503, detail=_QUEUE_UNAVAILABLE) from exc
     logger.info("Async evaluation queued", extra={"job_id": job_id})
     return AsyncJobResponse(job_id=job_id, status="queued")
 
@@ -214,7 +225,14 @@ def accept_offer(
     _user: str = Depends(require_auth),
 ) -> OfferAcceptResponse:
     """Accept an approved credit offer and enqueue async deployment."""
-    job_id = enqueue_deployment(offer_id, user_id=None)
+    try:
+        job_id = enqueue_deployment(offer_id, user_id=None)
+    except RedisConnectionError as exc:
+        logger.exception(
+            "Redis unavailable for offer acceptance",
+            extra={"offer_id": offer_id},
+        )
+        raise HTTPException(status_code=503, detail=_QUEUE_UNAVAILABLE) from exc
     logger.info(
         "Credit offer acceptance queued",
         extra={"offer_id": offer_id, "job_id": job_id},

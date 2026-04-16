@@ -60,6 +60,12 @@ ok "Checagem .env"
 # Legacy exports can collide with CALIBRATOR_PATH from .env (pydantic-settings / extras).
 unset CALIBRATION_PATH calibration_path 2>/dev/null || true
 
+# Host-run API cannot resolve Docker service hostname "redis" (Compose-only DNS).
+if [[ "${REDIS_URL:-}" == redis://redis:* ]]; then
+  export REDIS_URL="redis://127.0.0.1:${REDIS_URL#redis://redis:}"
+  info "REDIS_URL ajustado para 127.0.0.1 (hostname redis só existe na rede Docker)."
+fi
+
 uv run uvicorn src.api.main:app --host 0.0.0.0 --port 8000 \
   >> "$LOG_DIR/api.log" 2>&1 &
 echo $! > "$LOG_DIR/uvicorn.pid"

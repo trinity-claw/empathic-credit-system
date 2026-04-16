@@ -18,6 +18,15 @@ _EVAL_ID = "eval-worker-1"
 _OFFER_ID = "offer-worker-1"
 
 
+@pytest.fixture(autouse=True)
+def _notification_no_webhook():
+    """Avoid real HTTP when NOTIFICATION_WEBHOOK_URL is set in developer .env."""
+    mock_settings = MagicMock()
+    mock_settings.notification_webhook_url = None
+    with patch("src.api.notifications.get_settings", return_value=mock_settings):
+        yield
+
+
 @pytest.fixture()
 def _redis_spy():
     m = MagicMock()

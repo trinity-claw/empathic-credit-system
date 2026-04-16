@@ -5,6 +5,7 @@ from unittest.mock import patch
 
 import pytest
 from fastapi.testclient import TestClient
+from redis.exceptions import ConnectionError as RedisConnectionError
 
 _MOCK_RESULT = {
     "decision": "APPROVED",
@@ -233,6 +234,18 @@ class TestOfferAcceptance:
         assert body["offer_id"] == "offer-abc-123"
         assert body["job_id"] == "deploy-job-1"
         assert body["status"] == "queued"
+
+    def test_accept_offer_returns_503_when_redis_unreachable(self, client):
+        with patch(
+            "src.api.main.enqueue_deployment",
+            side_effect=RedisConnectionError("name resolution"),
+        ):
+            resp = client.post(
+                "/credit/offers/offer-abc-123/accept",
+                headers=_auth_header(),
+            )
+        assert resp.status_code == 503
+        assert "Redis" in resp.json()["detail"]
 
     def test_accept_offer_requires_auth(self, client):
         resp = client.post("/credit/offers/some-id/accept")

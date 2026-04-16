@@ -4,6 +4,9 @@ Also removes legacy keys calibration_path / CALIBRATION_PATH — they bind to th
 Pydantic field as CALIBRATOR_PATH and can override the correct path with a stale value
 like models/calibrator.pkl.
 
+Rewrites REDIS_URL from redis://redis:... to redis://127.0.0.1:... when the API runs on
+the host (Docker Compose service hostname redis does not resolve outside that network).
+
 Run: uv run python scripts/normalize_env.py
 """
 
@@ -79,6 +82,16 @@ def patch_env_file(root: Path, env_path: Path) -> bool:
 
         if key_upper == "CALIBRATOR_PATH":
             saw_calibrator_key = True
+
+        if key_upper == "REDIS_URL":
+            val_clean = val_part.strip().strip('"').strip("'").strip("\r")
+            if val_clean.startswith("redis://redis:"):
+                rest = val_clean.removeprefix("redis://redis:")
+                new_lines.append(f"REDIS_URL=redis://127.0.0.1:{rest}")
+                changed = True
+            else:
+                new_lines.append(line)
+            continue
 
         if key_upper not in key_to_default:
             new_lines.append(line)

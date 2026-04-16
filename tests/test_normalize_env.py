@@ -55,6 +55,15 @@ def test_drops_calibration_path_when_financial_calibrator_exists(tmp_path):
     assert "CALIBRATOR_PATH=models/xgboost_financial_calibrator.pkl" in text
 
 
+def test_patch_env_rewrites_redis_docker_hostname(tmp_path):
+    mod = _load_normalize_module()
+    env = tmp_path / ".env"
+    env.write_text("REDIS_URL=redis://redis:6379/0\n", encoding="utf-8")
+
+    assert mod.patch_env_file(tmp_path, env) is True
+    assert "REDIS_URL=redis://127.0.0.1:6379/0" in env.read_text(encoding="utf-8")
+
+
 def test_appends_calibrator_when_only_legacy_calibration_path(tmp_path):
     mod = _load_normalize_module()
     (tmp_path / "models").mkdir(parents=True)
